@@ -1,0 +1,3028 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Common Service Center Management System</title>
+    <!-- Tailwind CSS CDN -->
+    <script src="https://cdn.tailwindcss.com"></script>
+    <!-- Chart.js CDN -->
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    <!-- Lucide Icons -->
+    <script src="https://unpkg.com/lucide@latest"></script>
+	<script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
+    <style>
+        @import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap');
+        body { font-family: 'Inter', sans-serif; }
+        @media print {
+            .no-print { display: none !important; }
+            .print-only { display: block !important; }
+            body { background: white; color: black; }
+        }
+    </style>
+</head>
+<body class="bg-slate-100 min-h-screen flex flex-col text-slate-800">
+
+    <!-- Header / Navbar -->
+    <header class="bg-indigo-900 text-white shadow-md no-print">
+        <div class="max-w-7xl mx-auto px-4 py-4 flex flex-col md:flex-row justify-between items-center gap-4">
+            <div class="flex items-center space-x-3">
+                <div class="p-2 bg-indigo-700 rounded-lg">
+                    <i data-lucide="building-2" class="w-6 h-6"></i>
+                </div>
+                <div>
+                    <h1 class="text-xl font-bold tracking-wide">Common Service Center</h1>
+                    <p class="text-xs text-indigo-200">Daily Operations & Financial Management System</p>
+                </div>
+            </div>
+            
+            <div class="flex items-center space-x-3">
+                <div id="syncStatus" class="flex items-center text-xs bg-indigo-800 text-indigo-100 px-3 py-1.5 rounded-full border border-indigo-600">
+                    <span class="w-2 h-2 rounded-full bg-amber-400 mr-2 animate-pulse" id="syncDot"></span>
+                    <span id="syncText">Connecting Cloud...</span>
+                </div>
+                <button onclick="toggleRoleModal()" id="roleBadgeBtn" class="bg-indigo-800 hover:bg-indigo-700 text-indigo-100 border border-indigo-600 text-xs font-semibold px-3 py-1.5 rounded-lg flex items-center transition">
+                    <i data-lucide="shield" class="w-3.5 h-3.5 mr-1.5"></i>
+                    <span id="currentRoleText">Staff Operator</span>
+                </button>
+            </div>
+        </div>
+    </header>
+
+    <!-- Main Container -->
+   <main class="max-w-7xl mx-auto px-4 py-6 flex-grow w-full space-y-6">
+
+        <!-- Date Range Filter & Navigation Bar -->
+        <div class="bg-white p-4 rounded-xl border border-slate-200 shadow-sm flex flex-col md:flex-row justify-between items-center gap-4 no-print">
+           <div class="flex items-center justify-between gap-4 flex-wrap">
+				<!-- Left side: Navigation Tabs -->
+				<div class="flex items-center justify-between gap-4 flex-wrap">
+					<!-- Left side: Navigation Tabs -->
+					<div class="flex items-center space-x-2">
+						<button onclick="switchTab('services')" id="tabBtnServices" class="px-4 py-2 rounded-lg text-sm font-semibold bg-indigo-900 text-white shadow-sm flex items-center">
+							<i data-lucide="file-text" class="w-4 h-4 mr-2"></i> Services & Register
+						</button>
+						
+						<div id="expenseTabContainer" class="hidden">
+							<button onclick="switchTab('expenses')" id="tabBtnExpenses" class="px-4 py-2 rounded-lg text-sm font-semibold text-slate-600 hover:bg-slate-200 flex items-center">
+								<i data-lucide="receipt" class="w-4 h-4 mr-2"></i> Shop Expenses
+							</button>
+						</div>
+						<div id="attendanceTabContainer" class="hidden">
+							<button onclick="switchTab('attendance')" id="tabBtnAttendance" class="px-4 py-2 rounded-lg text-sm font-semibold text-slate-600 hover:bg-slate-200 flex items-center">
+								<i data-lucide="calendar-check" class="w-4 h-4 mr-2"></i> Staff Attendance
+							</button>
+						</div>
+						
+						<!-- Added wrapper div here -->
+						<div id="cashRegisterTabContainer" class="hidden">
+							<button onclick="switchTab('cashRegister')" id="tabBtnCashRegister" class="px-4 py-2 rounded-lg text-sm font-semibold text-slate-600 hover:bg-slate-200 flex items-center">
+								<i data-lucide="wallet" class="w-4 h-4 mr-2"></i> Cash Register
+							</button>
+						</div>
+					</div>
+
+					<!-- Right side: CSV Import Button (Controlled via JS matching role) -->
+					<div id="csvImportContainer" class="hidden">
+						<label class="cursor-pointer bg-indigo-600 hover:bg-indigo-700 text-white text-xs px-3.5 py-2 rounded-lg font-medium shadow-sm transition inline-flex items-center gap-1.5">
+							<i data-lucide="upload" class="w-3.5 h-3.5"></i>
+							<span>Import CSV</span>
+							<input type="file" id="csvFileInput" accept=".csv" class="hidden" onchange="handleCSVImport(event)">
+						</label>
+					</div>
+				</div>
+			
+			</div>
+            <div class="flex flex-wrap items-center gap-2">
+                <div class="flex items-center bg-slate-100 p-1 rounded-lg border border-slate-200 text-xs">
+                    <span class="text-slate-500 font-medium px-2"><i data-lucide="calendar" class="w-3.5 h-3.5 inline mr-1"></i>Period:</span>
+                    <select id="dateRangeSelect" onchange="handleDateRangeChange()" class="bg-white border border-slate-300 text-slate-700 rounded px-2 py-1 focus:outline-none font-semibold">
+                        <option value="TODAY" selected>Today</option>
+                        <option value="YESTERDAY">Yesterday</option>
+                        <option value="THIS_MONTH">This Month</option>
+                        <option value="ALL">All Time</option>
+                        <option value="CUSTOM">Custom Range...</option>
+                    </select>
+                </div>
+
+                <div id="customDateInputs" class="hidden flex items-center space-x-1 text-xs">
+                    <input type="date" id="customStartDate" onchange="renderUI()" class="border border-slate-300 rounded px-2 py-1">
+                    <span class="text-slate-400">to</span>
+                    <input type="date" id="customEndDate" onchange="renderUI()" class="border border-slate-300 rounded px-2 py-1">
+                </div>
+
+                <button onclick="quickWalkInModal()" class="bg-amber-600 hover:bg-amber-500 text-white font-medium text-xs px-3 py-2 rounded-lg flex items-center shadow-sm transition">
+                    <i data-lucide="zap" class="w-3.5 h-3.5 mr-1.5"></i> Quick Walk-In
+                </button>
+                <button onclick="openServiceModal()" class="bg-emerald-600 hover:bg-emerald-500 text-white font-medium text-xs px-4 py-2 rounded-lg flex items-center shadow-sm transition">
+                    <i data-lucide="plus-circle" class="w-3.5 h-3.5 mr-1.5"></i> New Entry
+                </button>
+            </div>
+        </div>
+
+        <!-- Dashboard KPI Summary Cards -->
+		<div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-4 no-print">
+			<!-- Gross Revenue Card -->
+			<div id="cardGrossRevenue" class="bg-white p-4 rounded-xl border border-slate-200 shadow-sm">
+				<div class="flex justify-between items-start">
+					<div>
+						<p class="text-xs font-semibold uppercase text-slate-500 tracking-wider">Service Revenue</p>
+						<h3 id="statTodayRevenue" class="text-xl font-bold text-slate-800 mt-1">₹0</h3>
+					</div>
+					<div class="p-2 bg-emerald-100 text-emerald-600 rounded-lg">
+						<i data-lucide="indian-rupee" class="w-4 h-4"></i>
+					</div>
+				</div>
+				<p id="statTodayCount" class="text-xs text-slate-500 mt-2">0 entries in period</p>
+			</div>
+
+			<!-- Shop Expenses Card (Independent) -->
+			<div id="cardExpenses" class="bg-white p-4 rounded-xl border border-slate-200 shadow-sm">
+				<div class="flex justify-between items-start">
+					<div>
+						<p class="text-xs font-semibold uppercase text-slate-500 tracking-wider">Shop Expenses</p>
+						<h3 id="statExpensesTotal" class="text-xl font-bold text-rose-600 mt-1">₹0</h3>
+					</div>
+					<div class="p-2 bg-rose-100 text-rose-600 rounded-lg">
+						<i data-lucide="minus-circle" class="w-4 h-4"></i>
+					</div>
+				</div>
+				<p id="statExpensesCount" class="text-xs text-slate-500 mt-2">0 expense entries</p>
+			</div>
+
+			<!-- Pending Dues Card -->
+			<div class="bg-white p-4 rounded-xl border border-slate-200 shadow-sm">
+				<div class="flex justify-between items-start">
+					<div>
+						<p class="text-xs font-semibold uppercase text-slate-500 tracking-wider">Pending Dues</p>
+						<h3 id="statPendingDues" class="text-xl font-bold text-amber-600 mt-1">₹0</h3>
+					</div>
+					<div class="p-2 bg-amber-100 text-amber-600 rounded-lg">
+						<i data-lucide="clock" class="w-4 h-4"></i>
+					</div>
+				</div>
+				<p id="statUnpaidCount" class="text-xs text-slate-500 mt-2">0 unpaid transactions</p>
+			</div>
+
+			<!-- Failed / Refund Card -->
+			<div class="bg-white p-4 rounded-xl border border-slate-200 shadow-sm">
+				<div class="flex justify-between items-start">
+					<div>
+						<p class="text-xs font-semibold uppercase text-slate-500 tracking-wider">Failed / Refund</p>
+						<h3 id="statFailedCount" class="text-xl font-bold text-rose-600 mt-1">0</h3>
+					</div>
+					<div class="p-2 bg-rose-100 text-rose-600 rounded-lg">
+						<i data-lucide="alert-triangle" class="w-4 h-4"></i>
+					</div>
+				</div>
+				<p id="statFailedAmount" class="text-xs text-slate-500 mt-2">₹0 stuck in failed payment</p>
+			</div>
+
+			<!-- Ready / Completed Card -->
+			<div class="bg-white p-4 rounded-xl border border-slate-200 shadow-sm">
+				<div class="flex justify-between items-start">
+					<div>
+						<p class="text-xs font-semibold uppercase text-slate-500 tracking-wider">Ready / Completed</p>
+						<h3 id="statReadyCount" class="text-xl font-bold text-emerald-600 mt-1">0</h3>
+					</div>
+					<div class="p-2 bg-emerald-100 text-emerald-600 rounded-lg">
+						<i data-lucide="check-circle-2" class="w-4 h-4"></i>
+					</div>
+				</div>
+				<p class="text-xs text-slate-500 mt-2">Processed in period</p>
+			</div>
+		</div>
+
+        <!-- VIEW 1: SERVICES REGISTER -->
+        <div id="viewServices" class="space-y-4">
+            <!-- Search & Quick Status Filters -->
+            <div class="bg-white p-4 rounded-xl border border-slate-200 shadow-sm flex flex-col md:flex-row justify-between items-center gap-4 no-print">
+               <div class="relative w-full md:w-80">
+					<i data-lucide="search" class="w-4 h-4 absolute left-3 top-3 text-slate-400"></i>
+					<input type="text" id="searchInput" onkeyup="handleSearchInput()" placeholder="Search Name, Phone, Ref ID..." class="w-full pl-9 pr-9 py-2 border border-slate-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500">
+					<!-- Clear Button -->
+					<button id="clearSearchBtn" onclick="clearSearch('searchInput')" class="absolute right-2.5 top-2.5 text-slate-400 hover:text-slate-600 hidden">
+						<i data-lucide="x" class="w-4 h-4"></i>
+					</button>
+				</div>
+				
+				<div class="flex items-center space-x-2">
+					<span class="text-xs text-slate-500 font-medium">Sort by:</span>
+					<select id="sortSelect" onchange="renderUI()" class="bg-white border border-slate-300 text-slate-700 text-xs rounded-lg px-2.5 py-2 focus:outline-none focus:ring-1 focus:ring-indigo-500">
+						<option value="date_desc" selected>Newest First</option>
+						<option value="date_asc">Oldest First</option>
+						<option value="amount_desc">Highest Amount</option>
+						<option value="amount_asc">Lowest Amount</option>
+						<option value="name_asc">Customer Name (A–Z)</option>
+						<option value="payment_status">Payment Status (A–Z)</option>
+					</select>
+				</div>
+
+                <div class="flex flex-wrap items-center gap-2 w-full md:w-auto justify-end">
+                   <div class="flex bg-slate-100 p-1 rounded-lg text-xs font-medium text-slate-600">
+						<button onclick="setFilterStatus('ALL')" id="btnFilterAll" class="px-3 py-1.5 rounded-md bg-white shadow-sm text-slate-800 font-semibold transition">All</button>
+						<button onclick="setFilterStatus('Submitted to Govt')" id="btnFilterGovt" class="px-3 py-1.5 rounded-md text-slate-600 hover:text-slate-900 transition">Submitted to Govt</button>
+						<button onclick="setFilterStatus('In Progress')" id="btnFilterInProgress" class="px-3 py-1.5 rounded-md text-slate-600 hover:text-slate-900 transition">In Progress</button>
+						<button onclick="setFilterStatus('FAILED')" id="btnFilterFailed" class="px-3 py-1.5 rounded-md text-slate-600 hover:text-slate-900 transition">Failed</button>
+						<button onclick="setFilterStatus('UNPAID')" id="btnFilterUnpaid" class="px-3 py-1.5 rounded-md text-slate-600 hover:text-slate-900 transition">Unpaid</button>
+					</div>
+
+                    <button onclick="exportToCustomExcel()" class="bg-slate-100 hover:bg-slate-200 text-slate-700 px-3 py-2 rounded-lg text-xs font-semibold flex items-center border border-slate-300 transition">
+                        <i data-lucide="download" class="w-3.5 h-3.5 mr-1.5"></i> Export
+                    </button>
+                    <!-- <button onclick="window.print()" class="bg-slate-100 hover:bg-slate-200 text-slate-700 px-3 py-2 rounded-lg text-xs font-semibold flex items-center border border-slate-300 transition"> -->
+                        <!-- <i data-lucide="printer" class="w-3.5 h-3.5 mr-1.5"></i> Print Summary -->
+                    <!-- </button> -->
+                </div>
+            </div>
+
+            <!-- Table Section -->
+            <div class="bg-white rounded-xl border border-slate-200 shadow-sm overflow-hidden">
+                <div class="overflow-x-auto">
+                    <table class="w-full text-left border-collapse">
+                        <thead>
+                            <tr class="bg-slate-50 border-b border-slate-200 text-slate-500 text-xs font-semibold uppercase tracking-wider">
+								<th class="p-4">Entry Date & Time</th>
+								<th id="thUpdatedHeader" class="p-4">Updated Time</th>
+								<th class="p-4">Customer Details</th>
+								<th class="p-4">Service & Ref ID</th>
+								<th class="p-4 text-right">Govt Fee</th>
+								<th class="p-4 text-right">Charge</th>
+								<th class="p-4 text-right">Total Fee</th>
+								<th class="p-4 text-center">Payment Status</th>
+								<th class="p-4 text-center">App Lifecycle Status</th>
+								<th class="p-4 text-center no-print">Actions</th>
+							</tr>
+                        </thead>
+                        <tbody id="servicesTableBody" class="divide-y divide-slate-200 text-sm">
+							<tr>
+								<td colspan="10" class="p-8 text-center text-slate-400">Loading service records...</td>
+							</tr>
+						</tbody>
+                    </table>
+                </div>
+            </div>
+        </div>
+
+        <!-- VIEW 2: SHOP EXPENSES REGISTER -->
+        <div id="viewExpenses" class="space-y-4 hidden">
+			<!-- Header & Add Button -->
+			<div class="bg-white p-4 rounded-xl border border-slate-200 shadow-sm flex justify-between items-center no-print">
+				<h3 class="text-base font-bold text-slate-800">Shop Expense Log</h3>
+				<div id="expenseContainer">
+					<button id="expenseBtn" onclick="openExpenseModal()" class="bg-indigo-900 hover:bg-indigo-800 text-white font-medium text-xs px-4 py-2 rounded-lg flex items-center shadow-sm transition">
+						<i data-lucide="minus-circle" class="w-4 h-4 mr-1"></i> Shop Expense
+					</button>
+				</div>
+			</div>
+
+			<!-- Search & Sort Toolbar -->
+			<div class="flex flex-col sm:flex-row justify-between items-center gap-3 bg-white p-3 rounded-xl border border-slate-200 shadow-sm no-print">
+				<!-- Search Box -->
+				<div class="relative w-full sm:w-80">
+					<i data-lucide="search" class="w-3.5 h-3.5 absolute left-3 top-3 text-slate-400"></i>
+					<input type="text" id="expenseSearchInput" placeholder="🔍 Search vendor, notes, category..." onkeyup="handleExpenseSearchInput()" class="w-full pl-9 pr-9 py-2 border border-slate-300 rounded-lg text-xs bg-white focus:outline-none focus:ring-2 focus:ring-indigo-500">
+					<!-- Clear Button -->
+					<button id="clearExpenseSearchBtn" onclick="clearSearch('expenseSearchInput')" class="absolute right-2.5 top-2.5 text-slate-400 hover:text-slate-600 hidden">
+						<i data-lucide="x" class="w-3.5 h-3.5"></i>
+					</button>
+				</div>
+				
+				<!-- Sorting Dropdown -->
+				<div class="w-full sm:w-auto flex items-center space-x-2">
+					<span class="text-xs font-semibold text-slate-600">Sort By:</span>
+					<select id="expenseSortSelect" onchange="filterAndRenderExpenses()" class="px-3 py-2 border border-slate-300 rounded-lg text-xs bg-white focus:outline-none focus:ring-2 focus:ring-indigo-500">
+						<option value="date_desc">Newest Date First</option>
+						<option value="date_asc">Oldest Date First</option>
+						<option value="amount_desc">Highest Amount First</option>
+						<option value="amount_asc">Lowest Amount First</option>
+					</select>
+				</div>
+			</div>
+
+			<!-- Expenses Table Container -->
+			<div class="bg-white rounded-xl border border-slate-200 shadow-sm overflow-hidden">
+				<div class="overflow-x-auto">
+					<table class="w-full text-left border-collapse">
+						<thead>
+							<tr class="bg-slate-50 border-b border-slate-200 text-slate-500 text-xs font-semibold uppercase tracking-wider">
+								<th class="p-4">Date</th>
+								<th class="p-4">Category</th>
+								<th class="p-4">Vendor / Paid To</th>
+								<th class="p-4">Mode</th>
+								<th class="p-4">Notes</th>
+								<th class="p-4 text-right">Amount (₹)</th>
+								<th class="p-4 text-center">Logged By</th>
+								<th class="p-4 text-center no-print">Actions</th>
+							</tr>
+						</thead>
+						<tbody id="expensesTableBody" class="divide-y divide-slate-200 text-xs text-slate-700">
+							<tr>
+								<td colspan="8" class="p-8 text-center text-slate-400">Loading expense logs...</td>
+							</tr>
+						</tbody>
+					</table>
+				</div>
+			</div>
+		</div>
+		<div id="attendanceView" class="hidden space-y-6">
+		
+			<!-- Header & Date Controls -->
+			<div class="bg-white p-5 rounded-xl border border-slate-200 shadow-sm flex flex-wrap items-center justify-between gap-4">
+				<div>
+					<h2 class="text-lg font-bold text-slate-800">Staff Attendance & Salary Register</h2>
+					<p class="text-xs text-slate-500">Track daily check-ins, breaks, personal outings, overtime, and automated salary deductions.</p>
+				</div>
+				<div class="flex items-center gap-3 flex-wrap">
+					<div>
+						<label class="block text-xs font-semibold text-slate-600 mb-1">Select Date</label>
+						<input type="date" id="attendanceDateFilter" class="px-3 py-2 border border-slate-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500" onchange="loadAttendanceForDate()">
+					</div>
+					<button onclick="toggleDailyLogSection()" id="toggleDailyLogBtn" class="mt-5 bg-slate-800 hover:bg-slate-900 text-white text-xs px-4 py-2.5 rounded-lg font-medium shadow transition inline-flex items-center gap-1.5">
+						<i data-lucide="edit-3" class="w-4 h-4"></i>
+						<span id="dailyLogBtnText">Open Daily Log Entry</span>
+					</button>
+					<button onclick="openAddStaffModal()" class="mt-5 bg-indigo-600 hover:bg-indigo-700 text-white text-xs px-4 py-2.5 rounded-lg font-medium shadow transition inline-flex items-center gap-1.5">
+						<i data-lucide="user-plus" class="w-4 h-4"></i>
+						<span>Add Staff</span>
+					</button>
+				</div>
+			</div>
+
+			<!-- Daily Attendance Table (Hidden by default) -->
+			<div id="dailyAttendanceSection" class="bg-white rounded-xl border border-slate-200 shadow-sm overflow-hidden hidden">
+				<div class="px-5 py-4 border-b border-slate-200 flex justify-between items-center bg-slate-50">
+					<h3 class="font-bold text-slate-700 text-sm">Daily Log, Personal Outings & Time Evaluation</h3>
+					<span id="currentAttendanceDateLabel" class="text-xs font-medium text-indigo-600 bg-indigo-50 px-2.5 py-1 rounded-full"></span>
+				</div>
+				<div class="overflow-x-auto">
+					<table class="w-full text-left border-collapse">
+						<thead>
+							<tr class="bg-slate-100/70 text-slate-600 text-xs uppercase font-semibold border-b border-slate-200">
+								<th class="p-3">Staff Name</th>
+								<th class="p-3">Check-In / Out</th>
+								<th class="p-3">Lunch/Break (Mins)</th>
+								<th class="p-3">Personal Out & In</th>
+								<th class="p-3">Approved OT</th>
+								<th class="p-3">Status</th>
+								<th class="p-3">Flags</th>
+								<th class="p-3 text-right">Actions</th>
+							</tr>
+						</thead>
+						<tbody id="attendanceTableBody" class="divide-y divide-slate-200 text-sm text-slate-700">
+							<!-- Populated dynamically via JS -->
+						</tbody>
+					</table>
+				</div>
+			</div>
+
+			<!-- Monthly Summary / Salary Payout Table -->
+			<div class="bg-white rounded-xl border border-slate-200 shadow-sm overflow-hidden">
+				<div class="px-5 py-4 border-b border-slate-200 flex justify-between items-center bg-slate-50">
+					<h3 class="font-bold text-slate-700 text-sm">Monthly Salary & Deduction Summary</h3>
+					<input type="month" id="salaryMonthFilter" class="px-3 py-1.5 border border-slate-300 rounded-lg text-xs" onchange="renderMonthlySalarySummary()">
+				</div>
+				<div class="overflow-x-auto">
+					<table class="w-full text-left border-collapse">
+						<thead>
+							<tr class="bg-slate-100/70 text-slate-600 text-xs uppercase font-semibold border-b border-slate-200">
+								<th class="p-3">Staff Name</th>
+								<th class="p-3">Base Salary</th>
+								<th class="p-3">Present</th>
+								<th class="p-3">Half Days</th>
+								<th class="p-3">Absents</th>
+								<th class="p-3">Deduction</th>
+								<th class="p-3 font-bold text-indigo-700">Final Payable</th>
+							</tr>
+						</thead>
+						<tbody id="salarySummaryTableBody" class="divide-y divide-slate-200 text-sm text-slate-700">
+							<!-- Populated dynamically via JS -->
+						</tbody>
+					</table>
+				</div>
+			</div>
+
+			<!-- Historical Attendance Log Section with Edit/Delete -->
+			<div class="bg-white rounded-xl border border-slate-200 shadow-sm overflow-hidden">
+				<div class="px-5 py-4 border-b border-slate-200 flex justify-between items-center bg-slate-50">
+					<h3 class="font-bold text-slate-700 text-sm">All Entered Attendance History</h3>
+					<span class="text-xs text-slate-500">Complete log with edit and delete options</span>
+				</div>
+				<div class="overflow-x-auto">
+					<table class="w-full text-left border-collapse">
+						<thead>
+							<tr class="bg-slate-100/70 text-slate-600 text-xs uppercase font-semibold border-b border-slate-200">
+								<th class="p-3">Date</th>
+								<th class="p-3">Staff Name</th>
+								<th class="p-3">Check-In / Out</th>
+								<th class="p-3">Personal Out/In</th>
+								<th class="p-3">Status</th>
+								<th class="p-3">Flags / Notes</th>
+								<th class="p-3 text-right">Actions</th>
+							</tr>
+						</thead>
+						<tbody id="allAttendanceHistoryBody" class="divide-y divide-slate-200 text-sm text-slate-700">
+							<!-- Populated dynamically via JS -->
+						</tbody>
+					</table>
+				</div>
+			</div>
+		</div>
+       <div id="cashRegisterView" class="space-y-6 hidden">
+		<div class="bg-white rounded-xl border border-slate-200 shadow-sm p-6">
+			<div class="flex justify-between items-center mb-6">
+				<h3 class="font-bold text-slate-800 text-lg">Daily Cash Register & Closing Sheet</h3>
+				<div class="flex items-center gap-3">
+					<label class="text-xs font-semibold text-slate-600">Select Date:</label>
+					<input type="date" id="cashRegisterDate" class="px-3 py-1.5 border border-slate-300 rounded-lg text-sm font-medium" onchange="loadDailyCashData()">
+				</div>
+				<button onclick="refreshDailyCashTotals()" class="px-3 py-2 bg-amber-600 hover:bg-amber-700 text-white rounded-lg text-sm font-semibold flex items-center">
+					<i data-lucide="refresh-cw" class="w-4 h-4 mr-2"></i> Recalculate New Entries
+				</button>
+			</div>
+
+			<div class="grid grid-cols-1 md:grid-cols-2 gap-6">
+				<!-- Left Column: Inputs -->
+				<div class="space-y-4 bg-slate-50 p-5 rounded-xl border border-slate-200">
+					<h4 class="font-bold text-slate-700 text-sm border-b pb-2">Daily Entries (Manual & Auto-Pulled)</h4>
+					
+					<div>
+						<label class="block text-xs font-semibold text-slate-600 mb-1">Opening Balance (Auto from Yesterday)</label>
+						<input type="number" id="cashOpeningBal" class="w-full px-3 py-2 border rounded-lg bg-slate-100 font-mono text-sm" readonly>
+					</div>
+					
+					<div>
+						<label class="block text-xs font-semibold text-slate-600 mb-1">Extra Cash Added (Change / Deposit)</label>
+						<input type="number" id="cashExtraAdded" value="0" class="w-full px-3 py-2 border rounded-lg font-mono text-sm" oninput="calculateCashRegister()">
+					</div>
+
+					<div class="grid grid-cols-2 gap-3">
+						<div>
+							<label class="block text-xs font-semibold text-slate-600 mb-1">Cash Income (Today)</label>
+							<input type="number" id="cashIncomeToday" value="0" class="w-full px-3 py-2 border rounded-lg font-mono text-sm" oninput="calculateCashRegister()">
+						</div>
+						<div>
+							<label class="block text-xs font-semibold text-slate-600 mb-1">GPay / Online Income</label>
+							<input type="number" id="gpayIncomeToday" value="0" class="w-full px-3 py-2 border rounded-lg font-mono text-sm" oninput="calculateCashRegister()">
+						</div>
+					</div>
+
+					<div class="grid grid-cols-2 gap-3">
+						<div>
+							<label class="block text-xs font-semibold text-slate-600 mb-1">Expense Total (Cash Paid)</label>
+							<input type="number" id="cashExpenseTotal" value="0" class="w-full px-3 py-2 border rounded-lg font-mono text-sm" oninput="calculateCashRegister()">
+						</div>
+						<div>
+							<label class="block text-xs font-semibold text-slate-600 mb-1">Cash Taken / Withdrawn</label>
+							<input type="number" id="cashTakenOut" value="0" class="w-full px-3 py-2 border rounded-lg font-mono text-sm" oninput="calculateCashRegister()">
+						</div>
+					</div>
+
+					<div>
+						<label class="block text-xs font-semibold text-slate-600 mb-1">Actual Physical Cash in Drawer / Table</label>
+						<input type="number" id="actualCashInDrawer" value="0" class="w-full px-3 py-2 border border-indigo-300 rounded-lg font-mono text-sm font-bold text-indigo-700 bg-indigo-50/50" oninput="calculateCashRegister()">
+					</div>
+				</div>
+
+				<!-- Right Column: Calculated Results Summary -->
+				<div class="space-y-4 bg-indigo-900 text-white p-6 rounded-xl flex flex-col justify-between shadow-md">
+					<div>
+						<h4 class="font-bold text-indigo-200 text-sm border-b border-indigo-700 pb-2 mb-4">Closing Calculation Summary</h4>
+						
+						<div class="space-y-3 text-sm">
+							<div class="flex justify-between">
+								<span class="text-indigo-200">Total Cash Inflow:</span>
+								<span id="displayTotalInflow" class="font-mono font-semibold">₹0.00</span>
+							</div>
+							<div class="flex justify-between">
+								<span class="text-indigo-200">Expected Closing Cash:</span>
+								<span id="displayExpectedCash" class="font-mono font-semibold">₹0.00</span>
+							</div>
+							<div class="flex justify-between">
+								<span class="text-indigo-200">Physical Cash Count:</span>
+								<span id="displayActualCash" class="font-mono font-semibold">₹0.00</span>
+							</div>
+							<div class="flex justify-between pt-2 border-t border-indigo-700">
+								<span class="text-indigo-200 font-bold">Difference (Short / Excess):</span>
+								<span id="displayDifference" class="font-mono font-bold text-emerald-400">₹0.00</span>
+							</div>
+						</div>
+					</div>
+
+					<div class="bg-indigo-950 p-4 rounded-lg border border-indigo-800 mt-4">
+						<div class="text-xs text-indigo-300 uppercase tracking-wider mb-1">Final Closing Balance (Carry Forward)</div>
+						<div id="displayFinalClosing" class="text-2xl font-mono font-bold text-white">₹0.00</div>
+					</div>
+
+					<button onclick="saveCurrentCashRegister()" class="w-full bg-emerald-600 hover:bg-emerald-700 text-white font-bold py-2.5 rounded-lg transition shadow">
+						Save & Lock Daily Closing
+					</button>
+				</div>
+			</div>
+		</div>
+	</div>
+    
+	   <!-- Analytics Section -->
+        <div class="grid grid-cols-1 md:grid-cols-2 gap-6 no-print">
+            <div class="bg-white p-5 rounded-xl border border-slate-200 shadow-sm">
+                <h4 class="text-sm font-semibold text-slate-700 mb-4">Service Category Distribution</h4>
+                <div class="h-52 relative flex justify-center">
+                    <canvas id="categoryChart"></canvas>
+                </div>
+            </div>
+            <div class="bg-white p-5 rounded-xl border border-slate-200 shadow-sm flex flex-col justify-between">
+                <div>
+                    <h4 class="text-sm font-semibold text-slate-700 mb-2">Common Service Center Real-Time Sync</h4>
+                    <p class="text-xs text-slate-500 leading-relaxed">
+                        Data entered here is synced live to Firebase Cloud. Counter staff can enter services while the owner monitors revenue, failed payment claims, and shop expenses securely from home or mobile.
+                    </p>
+                </div>
+                <div class="bg-indigo-50 border border-indigo-100 rounded-lg p-3 text-xs text-indigo-900 mt-4">
+                    <p class="font-medium">💡 Status Guide:</p>
+                    <p class="mt-0.5">Filter by "Submitted to Govt" to trace pending department approvals, or "Failed/Refund" to check stuck bank reversals.</p>
+                </div>
+            </div>
+        </div>
+		
+		
+    </main>
+    <!-- Service Entry Modal -->
+    <div id="serviceModal" class="fixed inset-0 bg-slate-900/50 backdrop-blur-sm hidden z-50 flex items-center justify-center p-4">
+		<div class="bg-white rounded-2xl shadow-2xl w-full max-w-2xl max-h-[90vh] flex flex-col overflow-hidden">
+            <div class="px-6 py-4 border-b border-indigo-700 flex justify-between items-center bg-indigo-600 shrink-0">
+				<h3 id="modalTitle" class="text-base font-bold text-white">New Service Entry</h3>
+				<button onclick="closeServiceModal()" class="text-indigo-200 hover:text-white transition">
+					<i data-lucide="x" class="w-5 h-5"></i>
+				</button>
+			</div>
+			<!-- Modal Body (Scrollable) -->
+			<div class="p-6 overflow-y-auto space-y-4 flex-grow">
+				<form id="serviceForm" onsubmit="handleServiceSubmit(event)" class="space-y-4">
+					<input type="hidden" id="editServiceId">
+					
+					<div class="grid grid-cols-1 sm:grid-cols-3 gap-4">
+						<div>
+							<label class="block text-xs font-semibold text-slate-600 mb-1">Entry Date *</label>
+							<input type="date" id="entryDate" required class="w-full px-3 py-2 border border-slate-300 rounded-lg text-sm focus:ring-2 focus:ring-indigo-500 focus:outline-none">
+						</div>
+						<div class="relative">
+							<label class="block text-xs font-semibold text-slate-600 mb-1">Mobile Number *</label>
+							<input type="tel" id="custMobile" required pattern="[0-9]{10}" placeholder="10-digit number" onkeyup="handleMobileLookup(this.value)" class="w-full px-3 py-2 border border-slate-300 rounded-lg text-sm focus:ring-2 focus:ring-indigo-500 focus:outline-none">
+							<div id="customerSuggestions" class="absolute z-10 left-0 right-0 top-full mt-1 bg-white border border-slate-200 rounded-lg shadow-lg hidden max-h-36 overflow-y-auto"></div>
+						</div>
+						<div>
+							<label class="block text-xs font-semibold text-slate-600 mb-1">Customer Name *</label>
+							<input type="text" id="custName" required class="w-full px-3 py-2 border border-slate-300 rounded-lg text-sm focus:ring-2 focus:ring-indigo-500 focus:outline-none">
+						</div>
+					</div>
+					<!-- Live Rate Master Quick-Select -->
+					<div class="bg-indigo-50/50 p-3 rounded-lg border border-indigo-100 mb-2">
+						<div class="grid grid-cols-1 sm:grid-cols-2 gap-3">
+							<div>
+								<label class="block text-[11px] font-semibold text-indigo-900 mb-1">Quick Select Department</label>
+								<select id="quickDeptSelect" onchange="filterQuickServiceDropdown()" class="w-full px-2.5 py-1.5 bg-white border border-indigo-200 rounded-lg text-xs focus:outline-none">
+									<option value="ALL">-- Filter by Department --</option>
+								</select>
+							</div>
+							<div>
+								<label class="block text-[11px] font-semibold text-indigo-900 mb-1">Quick Fill Service Rate</label>
+								<select id="quickServiceSelect" onchange="applyQuickServiceRate()" class="w-full px-2.5 py-1.5 bg-white border border-indigo-200 rounded-lg text-xs focus:outline-none">
+									<option value="">-- Choose from Rate Master --</option>
+								</select>
+							</div>
+						</div>
+						<div id="quickRateNote" class="hidden text-[11px] text-amber-800 bg-amber-50 border border-amber-200 px-2.5 py-1.5 rounded mt-2"></div>
+					</div>
+					<div class="grid grid-cols-1 sm:grid-cols-2 gap-4">
+						<div>
+							<label class="block text-xs font-semibold text-slate-600 mb-1">Category</label>
+							<select id="serviceCategory" class="w-full px-3 py-2 border border-slate-300 rounded-lg text-sm focus:ring-2 focus:ring-indigo-500 focus:outline-none">
+								<option value="Govt & Citizen Portals">Govt & Citizen Portals (E-District/NORKA/Agristack)</option>
+								<option value="Education & Exams">Education & Exams (University Fees/SGOU)</option>
+								<option value="Recruitment & Job Applications">Recruitment & Job Apps (PSC/SSC/UGC)</option>
+								<option value="Identity & Registrations">Identity & Registrations (ID/PAN/Ration)</option>
+								<option value="Travel & Utility Services">Travel & Utility (KSEB/KWA/KSRTC)</option>
+								<option value="Counter & Printing Services">Counter & Printing (Photocopy/Lamination)</option>
+								<option value="Financial & Insurance">Financial & Insurance</option>
+								<option value="Others">Others</option>
+							</select>
+						</div>
+						<div>
+							<label class="block text-xs font-semibold text-slate-600 mb-1">Service Name *</label>
+							<input type="text" id="serviceName" placeholder="e.g. Income Cert / PSC Reg" required class="w-full px-3 py-2 border border-slate-300 rounded-lg text-sm focus:ring-2 focus:ring-indigo-500 focus:outline-none">
+						</div>
+					</div>
+
+					<div>
+						<label class="block text-xs font-semibold text-slate-600 mb-1">Application / Reference ID</label>
+						<input type="text" id="refId" placeholder="Govt Ack / Ref / PNR ID" class="w-full px-3 py-2 border border-slate-300 rounded-lg text-sm focus:ring-2 focus:ring-indigo-500 focus:outline-none">
+					</div>
+
+					<div class="grid grid-cols-3 gap-3 bg-slate-50 p-3 rounded-lg border border-slate-200">
+						<div>
+							<label class="block text-xs font-semibold text-slate-600 mb-1">Govt Fee (₹)</label>
+							<input type="number" id="govtFee" value="0" min="0" oninput="calculateTotal()" class="w-full px-2.5 py-1.5 border border-slate-300 rounded-lg text-sm focus:outline-none">
+						</div>
+						<div>
+							<label class="block text-xs font-semibold text-slate-600 mb-1">Service Charge (₹)</label>
+							<input type="number" id="serviceCharge" value="20" min="0" oninput="calculateTotal()" class="w-full px-2.5 py-1.5 border border-slate-300 rounded-lg text-sm focus:outline-none">
+						</div>
+						<div>
+							<label class="block text-xs font-semibold text-slate-600 mb-1">Total Fee (₹)</label>
+							<input type="number" id="totalFee" value="20" readonly class="w-full px-2.5 py-1.5 bg-slate-100 border border-slate-300 rounded-lg text-sm font-bold text-slate-700">
+						</div>
+					</div>
+
+					<div class="grid grid-cols-1 sm:grid-cols-2 gap-4">
+						<div>
+							<label class="block text-xs font-semibold text-slate-600 mb-1">Payment Status</label>
+							<select id="paymentStatus" onchange="togglePaymentStatusFields()" class="w-full px-3 py-2 border border-slate-300 rounded-lg text-sm focus:ring-2 focus:ring-indigo-500 focus:outline-none">
+								<option value="Paid (UPI)">Paid (UPI)</option>
+								<option value="Paid (Cash)">Paid (Cash)</option>
+								<option value="Split (Cash & UPI)">Split (Cash & UPI)</option>
+								<option value="Partial">Partial / Advance Paid</option>
+								<option value="Unpaid">Unpaid / Pending Dues</option>
+								<option value="Payment Failed (Re-Payment Done)">Payment Failed (Re-Payment Done)</option>
+								<option value="Refund Pending from Dept/Bank">Refund Pending from Dept/Bank</option>
+							</select>
+						</div>
+						<div>
+							<label class="block text-xs font-semibold text-slate-600 mb-1">Application Lifecycle Status</label>
+							<select id="appStatus" class="w-full px-3 py-2 border border-slate-300 rounded-lg text-sm focus:ring-2 focus:ring-indigo-500 focus:outline-none">
+								<option value="Delivered">Delivered / Completed</option>
+								<option value="Submitted to Govt">Submitted to Govt / Under Review</option>
+								<option value="Ready for Pickup">Ready for Pickup / Print</option>
+								<option value="In Progress">In Progress</option>
+								<option value="Query Raised / Rejected">Query Raised / Rejected</option>
+							</select>
+						</div>
+					</div>
+
+					<div id="failedPaymentGroup" class="hidden bg-rose-50 p-3 rounded-lg border border-rose-200 space-y-2">
+						<p class="text-xs font-bold text-rose-800">Failed Payment & Refund Claim Tracking</p>
+						<div class="grid grid-cols-1 sm:grid-cols-2 gap-2">
+							<input type="text" id="failedTxnId" placeholder="Failed Bank/Txn Ref ID" class="w-full px-2.5 py-1.5 border border-rose-300 rounded text-xs focus:outline-none">
+							<select id="refundClaimStatus" class="w-full px-2.5 py-1.5 border border-rose-300 rounded text-xs focus:outline-none">
+								<option value="Complaint Logged">Complaint Logged</option>
+								<option value="Under Bank Processing">Under Bank Processing</option>
+								<option value="Refund Credited">Refund Credited</option>
+							</select>
+						</div>
+					</div>
+
+					<div id="splitPaymentGroup" class="hidden bg-indigo-50 p-3 rounded-lg border border-indigo-200 space-y-2">
+						<p class="text-xs font-bold text-indigo-900">Split Payment Breakdown (Cash & UPI)</p>
+						<div class="grid grid-cols-1 sm:grid-cols-2 gap-2">
+							<div>
+								<label class="block text-[10px] font-semibold text-slate-600 mb-0.5">Cash Amount (₹)</label>
+								<input type="number" id="cashAmount" value="0" min="0" placeholder="Cash paid" class="w-full px-2.5 py-1.5 border border-indigo-300 rounded text-xs focus:outline-none bg-white">
+							</div>
+							<div>
+								<label class="block text-[10px] font-semibold text-slate-600 mb-0.5">UPI / GPay Amount (₹)</label>
+								<input type="number" id="upiAmount" value="0" min="0" placeholder="UPI paid" class="w-full px-2.5 py-1.5 border border-indigo-300 rounded text-xs focus:outline-none bg-white">
+							</div>
+						</div>
+					</div>
+
+					<div>
+						<label class="block text-xs font-semibold text-slate-600 mb-1">Remarks / Notes</label>
+						<input type="text" id="remarks" placeholder="Optional notes" class="w-full px-3 py-2 border border-slate-300 rounded-lg text-sm focus:ring-2 focus:ring-indigo-500 focus:outline-none">
+					</div>
+
+					<!-- Audit Trail Box (Only visible when editing an existing record) -->
+					<div id="historyLogContainer" class="mt-4 pt-4 border-t border-slate-200 hidden">
+						<label class="block text-xs font-semibold text-slate-600 mb-2">📜 Application & Payment Audit Trail</label>
+						<div id="historyLogList" class="bg-slate-50 border border-slate-200 rounded-lg p-3 max-h-32 overflow-y-auto space-y-2 text-xs text-slate-600 font-mono">
+							<!-- Logs dynamically injected here -->
+						</div>
+					</div>
+
+				</form>
+			</div>
+			<div class="px-6 py-3 border-t border-slate-200 bg-slate-50 flex justify-end space-x-3 shrink-0">
+				<button type="button" onclick="closeServiceModal()" class="px-4 py-2 border border-slate-300 rounded-lg text-xs font-semibold text-slate-700 hover:bg-slate-100 transition">
+					Cancel
+				</button>
+				<button type="button" onclick="handleSaveAndAddAnother(event)" class="px-4 py-2 bg-indigo-50 text-indigo-600 border border-indigo-200 text-xs font-semibold rounded-lg hover:bg-indigo-100">
+					💾 Save & Add Another Service
+				</button>
+				<button type="submit" form="serviceForm" class="px-5 py-2 bg-indigo-600 hover:bg-indigo-700 text-white rounded-lg text-xs font-semibold shadow transition">
+					Save Record
+				</button>
+			</div>
+		</div>
+    </div>
+
+	<!-- Shop Expense Entry / Edit Modal -->
+	<div id="expenseModal" class="fixed inset-0 bg-slate-900/50 backdrop-blur-sm hidden z-50 flex items-center justify-center p-4">
+		<div class="bg-white rounded-2xl shadow-2xl w-full max-w-2xl max-h-[90vh] flex flex-col overflow-hidden">
+			<div class="px-6 py-4 border-b border-indigo-700 flex justify-between items-center bg-indigo-600 shrink-0">
+				<h3 id="expenseModalTitle" class="text-base font-bold text-white">Add Shop Expense</h3>
+				<button onclick="closeExpenseModal()" class="text-indigo-200 hover:text-white transition">
+					<i data-lucide="x" class="w-5 h-5"></i>
+				</button>
+			</div>
+			<!-- Modal Body (Scrollable) -->
+			<div class="p-6 overflow-y-auto space-y-4 flex-grow">
+				<form id="expenseForm" onsubmit="handleExpenseSubmit(event)" class="space-y-4">
+					<!-- Hidden ID field for editing support -->
+					<input type="hidden" id="editExpenseId">
+					
+					<!-- Row 1: Date & Category -->
+					<div class="grid grid-cols-1 sm:grid-cols-2 gap-4">
+						<div>
+							<label class="block text-xs font-semibold text-slate-600 mb-1">Expense Date *</label>
+							<input type="date" id="expDate" required class="w-full px-3 py-2 border border-slate-300 rounded-lg text-sm focus:ring-2 focus:ring-indigo-500 focus:outline-none">
+						</div>
+						<div>
+							<label class="block text-xs font-semibold text-slate-600 mb-1">Category *</label>
+							<select id="expCategory" class="w-full px-3 py-2 border border-slate-300 rounded-lg text-sm focus:ring-2 focus:ring-indigo-500 focus:outline-none">
+								<option value="Electricity / KSEB">Electricity / KSEB</option>
+								<option value="Internet / Broadband">Internet / Broadband</option>
+								<option value="Rent">Shop Rent</option>
+								<option value="Stationery & Printing">Stationery & Printing (A4, Toner)</option>
+								<option value="Maintenance">Maintenance & Repairs</option>
+								<option value="Miscellaneous">Miscellaneous</option>
+							</select>
+						</div>
+					</div>
+
+					<!-- Row 2: Vendor Name (Full width for extra length) -->
+					<div>
+						<label class="block text-xs font-semibold text-slate-600 mb-1">Vendor / Paid To *</label>
+						<input type="text" id="expVendor" placeholder="e.g. KSEB Section Office / Local Stationery Supplier" required class="w-full px-3 py-2 border border-slate-300 rounded-lg text-sm focus:ring-2 focus:ring-indigo-500 focus:outline-none">
+					</div>
+
+					<!-- Row 3: Amount & Payment Mode (Side-by-side on next line) -->
+					<div class="grid grid-cols-1 sm:grid-cols-2 gap-4">
+						<div>
+							<label class="block text-xs font-semibold text-slate-600 mb-1">Amount (₹) *</label>
+							<input type="number" id="expAmount" min="0" step="0.01" placeholder="0.00" required class="w-full px-3 py-2 border border-slate-300 rounded-lg text-sm focus:ring-2 focus:ring-indigo-500 focus:outline-none">
+						</div>
+						<div>
+							<label class="block text-xs font-semibold text-slate-600 mb-1">Payment Mode *</label>
+							<select id="expPaymentMode" class="w-full px-3 py-2 border border-slate-300 rounded-lg text-sm focus:ring-2 focus:ring-indigo-500 focus:outline-none">
+								<option value="Cash">Cash (Shop Drawer)</option>
+								<option value="UPI / GPay">UPI / GPay</option>
+								<option value="Bank Transfer">Bank Transfer</option>
+							</select>
+						</div>
+					</div>
+
+					<!-- Row 4: Notes / Description -->
+					<div>
+						<label class="block text-xs font-semibold text-slate-600 mb-1">Notes / Description</label>
+						<input type="text" id="expNotes" placeholder="Optional notes (e.g. Bill Consumer No / Invoice Ref)" class="w-full px-3 py-2 border border-slate-300 rounded-lg text-sm focus:ring-2 focus:ring-indigo-500 focus:outline-none">
+					</div>
+				</form>
+			</div>
+			<!-- Modal Footer -->
+			<div class="px-6 py-3 border-t border-slate-200 bg-slate-50 flex justify-end space-x-3 shrink-0">
+				<button type="button" onclick="closeExpenseModal()" class="px-4 py-2 border border-slate-300 rounded-lg text-xs font-semibold text-slate-700 hover:bg-slate-100 transition">
+					Cancel
+				</button>
+				<button type="submit" form="expenseForm" class="px-5 py-2 bg-indigo-600 hover:bg-indigo-700 text-white rounded-lg text-xs font-semibold shadow transition">
+					Log Expense
+				</button>
+			</div>
+		</div>
+	</div>
+
+    <!-- Role Switcher & Password Security Modal -->
+    <div id="roleModal" class="fixed inset-0 bg-slate-900/50 backdrop-blur-sm hidden items-center justify-center p-4 z-50 no-print">
+        <div class="bg-white rounded-xl shadow-xl border border-slate-200 w-full max-w-sm overflow-hidden">
+            <div class="bg-indigo-900 px-6 py-4 text-white flex justify-between items-center">
+                <h3 class="font-bold text-base">Role & Admin Security</h3>
+                <button onclick="toggleRoleModal()" class="text-indigo-200 hover:text-white"><i data-lucide="x" class="w-5 h-5"></i></button>
+            </div>
+            <div class="p-6 space-y-4">
+                <p class="text-xs text-slate-500">
+                    Switch to <strong>Owner (Admin)</strong> mode to unlock financial metrics, Shop Expenses, and enable record deletion.
+                </p>
+                <div>
+                    <label class="block text-xs font-semibold text-slate-600 mb-1">Enter Admin Security PIN / Password</label>
+                    <input type="password" id="adminPasswordInput" placeholder="Enter Password" class="w-full px-3 py-2 border border-slate-300 rounded-lg text-sm focus:outline-none">
+                </div>
+                <div class="flex space-x-2 pt-2">
+                    <button onclick="switchToStaffRole()" class="w-1/2 py-2 border border-slate-300 text-slate-700 rounded-lg text-xs font-semibold">Switch to Staff</button>
+                    <button onclick="verifyAndSwitchAdmin()" class="w-1/2 py-2 bg-indigo-900 text-white rounded-lg text-xs font-semibold shadow-md">Unlock Owner</button>
+                </div>
+            </div>
+        </div>
+    </div>
+	
+	<div id="staffModal" class="fixed inset-0 bg-slate-900/50 hidden flex items-center justify-center z-50 p-4">
+	
+	<div class="bg-white rounded-xl max-w-md w-full p-6 shadow-xl space-y-4">
+			<div class="flex justify-between items-center border-b border-slate-200 pb-3">
+				<h3 class="font-bold text-slate-800 text-base">Add New Staff Member</h3>
+				<button onclick="closeAddStaffModal()" class="text-slate-400 hover:text-slate-600"><i data-lucide="x" class="w-5 h-5"></i></button>
+			</div>
+			<form id="staffForm" onsubmit="handleSaveStaff(event)" class="space-y-4">
+				<div>
+					<label class="block text-xs font-semibold text-slate-600 mb-1">Full Name</label>
+					<input type="text" id="staffNameInput" required class="w-full px-3 py-2 border border-slate-300 rounded-lg text-sm focus:ring-2 focus:ring-indigo-500">
+				</div>
+				<div>
+					<label class="block text-xs font-semibold text-slate-600 mb-1">Mobile Number</label>
+					<input type="tel" id="staffMobileInput" required class="w-full px-3 py-2 border border-slate-300 rounded-lg text-sm focus:ring-2 focus:ring-indigo-500">
+				</div>
+				<div>
+					<label class="block text-xs font-semibold text-slate-600 mb-1">Monthly Base Salary (₹)</label>
+					<input type="number" id="staffSalaryInput" required class="w-full px-3 py-2 border border-slate-300 rounded-lg text-sm focus:ring-2 focus:ring-indigo-500">
+				</div>
+				<div class="flex justify-end gap-3 pt-2">
+					<button type="button" onclick="closeAddStaffModal()" class="px-4 py-2 border border-slate-300 text-slate-600 rounded-lg text-xs font-medium">Cancel</button>
+					<button type="submit" class="px-4 py-2 bg-indigo-600 hover:bg-indigo-700 text-white rounded-lg text-xs font-medium">Save Staff</button>
+				</div>
+			</form>
+		</div>
+	</div>
+	
+	
+	<!-- Firebase SDK Setup -->
+
+    <script type="module">
+        import { initializeApp } from "https://www.gstatic.com/firebasejs/11.0.0/firebase-app.js";
+        import { 
+            getFirestore, 
+            collection, 
+            addDoc, 
+			setDoc,
+            onSnapshot, 
+            doc, 
+            updateDoc, 
+            deleteDoc
+        } from "https://www.gstatic.com/firebasejs/11.0.0/firebase-firestore.js";
+
+        const firebaseConfig = {
+          apiKey: "AIzaSyBm7lcrWOH3DwXPLXbYa7nTSzi5hIV9hUE",
+          authDomain: "csc-management-system.firebaseapp.com",
+          projectId: "csc-management-system",
+          storageBucket: "csc-management-system.firebasestorage.app",
+          messagingSenderId: "913341854315",
+          appId: "1:913341854315:web:5bb7fba8b1ca4aa7bbf72e"
+        };
+
+        const app = initializeApp(firebaseConfig);
+        const db = getFirestore(app);
+        const servicesCol = collection(db, "services");
+        const expensesCol = collection(db, "expenses");
+		const staffCol = collection(db, "staff");
+        const attendanceCol = collection(db, "attendance");
+
+        let allServices = [];
+        let allExpenses = [];
+		let allStaff = [];
+        let allAttendance = {};
+		
+        const syncDot = document.getElementById('syncDot');
+        const syncText = document.getElementById('syncText');
+		
+		window.filteredServices = [];
+
+        function updateSyncStatus(isLive, message) {
+            if (isLive) {
+                syncDot.className = "w-2 h-2 rounded-full bg-emerald-400 mr-2";
+                syncText.innerText = message || "Live Cloud Synced";
+            } else {
+                syncDot.className = "w-2 h-2 rounded-full bg-amber-400 mr-2 animate-pulse";
+                syncText.innerText = message || "Connecting...";
+            }
+        }
+
+        // Live Cloud Sync for Services
+        onSnapshot(servicesCol, (snapshot) => {
+            allServices = [];
+            snapshot.forEach((docSnap) => {
+                allServices.push({ id: docSnap.id, ...docSnap.data() });
+            });
+            updateSyncStatus(true, "Live Cloud Synced");
+            window.renderUI();
+        }, (err) => {
+            console.error("Services Firestore error:", err);
+            updateSyncStatus(false, "Sync Error");
+        });
+
+        // Live Cloud Sync for Expenses
+       // Live Cloud Sync for Expenses
+        onSnapshot(expensesCol, (snapshot) => {
+            allExpenses = [];
+            snapshot.forEach((docSnap) => {
+                allExpenses.push({ id: docSnap.id, ...docSnap.data() });
+            });
+            
+            // This runs automatically as soon as Firebase downloads the data on load, add, edit, or delete
+            if (typeof filterAndRenderExpenses === 'function') {
+                filterAndRenderExpenses();
+            }
+            if (typeof window.renderUI === 'function') {
+                window.renderUI();
+            }
+        });
+
+		// Live Cloud Sync for Staff
+        onSnapshot(staffCol, (snapshot) => {
+            allStaff = [];
+            snapshot.forEach((docSnap) => {
+                allStaff.push({ id: docSnap.id, ...docSnap.data() });
+            });
+            if (typeof loadAttendanceForDate === 'function') loadAttendanceForDate();
+            if (typeof renderMonthlySalarySummary === 'function') renderMonthlySalarySummary();
+            if (typeof renderAllAttendanceHistory === 'function') renderAllAttendanceHistory();
+        });
+
+        // Live Cloud Sync for Attendance
+        onSnapshot(attendanceCol, (snapshot) => {
+            allAttendance = {};
+            snapshot.forEach((docSnap) => {
+                allAttendance[docSnap.id] = docSnap.data();
+            });
+            if (typeof loadAttendanceForDate === 'function') loadAttendanceForDate();
+            if (typeof renderMonthlySalarySummary === 'function') renderMonthlySalarySummary();
+            if (typeof renderAllAttendanceHistory === 'function') renderAllAttendanceHistory();
+        });
+		
+		// Global Firebase Bindings for Staff & Attendance
+        window.getAllStaff = () => allStaff;
+        window.getAllAttendance = () => allAttendance;
+
+        window.saveStaffMember = async function(staffData) {
+            const newId = 'staff_' + Date.now();
+            const docRef = doc(db, "staff", newId);
+            await setDoc(docRef, staffData);
+        };
+
+        window.deleteStaffMember = async function(id) {
+            await deleteDoc(doc(db, "staff", id));
+        };
+
+        window.saveAttendanceRecord = async function(staffId, dateVal, recordData) {
+            const docId = `${staffId}_${dateVal}`;
+            const docRef = doc(db, "attendance", docId);
+            await setDoc(docRef, recordData, { merge: true });
+        };
+
+        window.deleteAttendanceRecordDoc = async function(docId) {
+            await deleteDoc(doc(db, "attendance", docId));
+        };
+		
+        // Global Firebase Bindings
+        window.saveServiceEntry = async function(data) {
+            if (data.id) {
+                const docRef = doc(db, "services", data.id);
+                delete data.id;
+                await updateDoc(docRef, data);
+            } else {
+                data.createdTimestamp = new Date().toISOString();
+                await addDoc(servicesCol, data);
+            }
+        };
+
+        window.deleteServiceEntry = async function(id) {
+            if (confirm("Are you sure you want to delete this service record?")) {
+                await deleteDoc(doc(db, "services", id));
+            }
+        };
+
+        window.saveExpenseEntry = async function(data) {
+            if (data.id) {
+                const docRef = doc(db, "expenses", data.id);
+                delete data.id;
+                await updateDoc(docRef, data);
+            } else {
+                data.createdTimestamp = new Date().toISOString();
+                await addDoc(expensesCol, data);
+            }
+        };
+
+       window.deleteExpenseEntry = async function(id) {
+            if (confirm("Delete this expense log?")) {
+                await deleteDoc(doc(db, "expenses", id));
+                
+                // Refresh the expense table and update totals immediately
+                if (typeof filterAndRenderExpenses === 'function') {
+                    filterAndRenderExpenses();
+                }
+                if (typeof renderUI === 'function') {
+                    renderUI();
+                }
+            }
+        };
+        window.getAllServices = () => allServices;
+        window.getAllExpenses = () => patchLegacyExpenses(allExpenses);
+
+        function patchLegacyExpenses(expensesArray) {
+            if (!Array.isArray(expensesArray)) return [];
+            return expensesArray.map((item, index) => {
+                if (!item.id) {
+                    item.id = 'exp_legacy_' + (item.date || 'nodate') + '_' + index + '_' + Math.random().toString(36).substring(2, 7);
+                }
+                return item;
+            });
+        }
+		
+		const dailyCashCol = collection(db, "daily_cash");
+        let allDailyCash = [];
+
+        // Live sync for Daily Cash Register
+        onSnapshot(dailyCashCol, (snapshot) => {
+            allDailyCash = [];
+            snapshot.forEach((docSnap) => {
+                allDailyCash.push({ id: docSnap.id, ...docSnap.data() });
+            });
+            if (typeof renderDailyCashRegister === 'function') renderDailyCashRegister();
+        });
+
+        window.getAllDailyCash = () => allDailyCash;
+
+        window.saveDailyCashRecord = async function(dateKey, recordData) {
+            const docRef = doc(db, "daily_cash", dateKey);
+            await setDoc(docRef, recordData, { merge: true });
+        };
+		
+		window.loadDailyCashData = function loadDailyCashData() {
+    const dateInput = document.getElementById('cashRegisterDate');
+    if (!dateInput || !dateInput.value) return;
+    const dateVal = dateInput.value;
+
+    const allRecords = window.getAllDailyCash ? window.getAllDailyCash() : [];
+    
+    const parts = dateVal.split('-');
+    const currDate = new Date(parts[0], parts[1] - 1, parts[2]);
+    currDate.setDate(currDate.getDate() - 1);
+    const prevDateStr = currDate.getFullYear() + '-' + 
+                        String(currDate.getMonth() + 1).padStart(2, '0') + '-' + 
+                        String(currDate.getDate()).padStart(2, '0');
+    
+    let prevOpening = 0;
+    const prevRecord = allRecords.find(r => r.id === prevDateStr);
+    if (prevRecord) {
+        prevOpening = prevRecord.finalClosingBalance || 0;
+    }
+
+    let autoCashIncome = 0;
+    let autoGpayIncome = 0;
+    let autoExpenseTotal = 0;
+
+    const services = window.getAllServices();
+    services.forEach(s => {
+        const sDate = s.entryDate || s.date || s.serviceDate || (s.createdTimestamp ? s.createdTimestamp.split('T')[0] : '');
+        
+        if (sDate === dateVal) {
+            const cashPart = parseFloat(s.cashAmount || 0);
+            const upiPart = parseFloat(s.upiAmount || 0);
+
+            if (cashPart === 0 && upiPart === 0) {
+                const total = parseFloat(s.totalFee || s.amount || s.fee || 0);
+                const paymentInfo = String(s.paymentStatus || s.paymentMode || '').toUpperCase();
+                if (paymentInfo.includes('UPI') || paymentInfo.includes('GPAY') || paymentInfo.includes('ONLINE')) {
+                    autoGpayIncome += total;
+                } else {
+                    autoCashIncome += total;
+                }
+            } else {
+                autoCashIncome += cashPart;
+                autoGpayIncome += upiPart;
+            }
+        }
+    });
+
+    const expenses = window.getAllExpenses();
+    expenses.forEach(e => {
+        const eDate = e.entryDate || e.date || e.expenseDate || (e.createdTimestamp ? e.createdTimestamp.split('T')[0] : '');
+        if (eDate === dateVal) {
+            autoExpenseTotal += parseFloat(e.amount || e.expense || e.cost || 0);
+        }
+    });
+
+    const currentRecord = allRecords.find(r => r.id === dateVal);
+    if (currentRecord) {
+        document.getElementById('cashOpeningBal').value = currentRecord.openingBalance !== undefined ? currentRecord.openingBalance : prevOpening;
+        document.getElementById('cashExtraAdded').value = currentRecord.extraAdded || 0;
+        document.getElementById('cashIncomeToday').value = currentRecord.cashIncome !== undefined ? currentRecord.cashIncome : autoCashIncome;
+        document.getElementById('gpayIncomeToday').value = currentRecord.gpayIncome !== undefined ? currentRecord.gpayIncome : autoGpayIncome;
+        document.getElementById('cashExpenseTotal').value = currentRecord.expenseTotal !== undefined ? currentRecord.expenseTotal : autoExpenseTotal;
+        document.getElementById('cashTakenOut').value = currentRecord.cashTaken || 0;
+        document.getElementById('actualCashInDrawer').value = currentRecord.actualCashInDrawer || 0;
+    } else {
+        document.getElementById('cashOpeningBal').value = prevOpening;
+        document.getElementById('cashExtraAdded').value = 0;
+        document.getElementById('cashIncomeToday').value = autoCashIncome;
+        document.getElementById('gpayIncomeToday').value = autoGpayIncome;
+        document.getElementById('cashExpenseTotal').value = autoExpenseTotal;
+        document.getElementById('cashTakenOut').value = 0;
+        document.getElementById('actualCashInDrawer').value = 0;
+    }
+
+    calculateCashRegister();
+}
+
+window.calculateCashRegister = function calculateCashRegister() {
+    const opening = parseFloat(document.getElementById('cashOpeningBal').value) || 0;
+    const extra = parseFloat(document.getElementById('cashExtraAdded').value) || 0;
+    const cashIncome = parseFloat(document.getElementById('cashIncomeToday').value) || 0;
+    const expense = parseFloat(document.getElementById('cashExpenseTotal').value) || 0;
+    const cashTaken = parseFloat(document.getElementById('cashTakenOut').value) || 0;
+    const actualCash = parseFloat(document.getElementById('actualCashInDrawer').value) || 0;
+
+    const totalInflow = opening + extra + cashIncome;
+    const expectedCash = totalInflow - expense; 
+    const difference = actualCash - expectedCash;
+    const finalClosing = actualCash - cashTaken;
+
+    document.getElementById('displayTotalInflow').innerText = `₹${totalInflow.toLocaleString('en-IN')}`;
+    document.getElementById('displayExpectedCash').innerText = `₹${expectedCash.toLocaleString('en-IN')}`;
+    document.getElementById('displayActualCash').innerText = `₹${actualCash.toLocaleString('en-IN')}`;
+    document.getElementById('displayFinalClosing').innerText = `₹${finalClosing.toLocaleString('en-IN')}`;
+
+    const diffEl = document.getElementById('displayDifference');
+    diffEl.innerText = `₹${difference.toLocaleString('en-IN')}`;
+    if (difference === 0) {
+        diffEl.className = "font-mono font-bold text-emerald-400";
+    } else if (difference > 0) {
+        diffEl.className = "font-mono font-bold text-amber-400";
+    } else {
+        diffEl.className = "font-mono font-bold text-rose-400";
+    }
+}
+
+window.saveCurrentCashRegister = async function saveCurrentCashRegister() {
+    const dateInput = document.getElementById('cashRegisterDate');
+    if (!dateInput || !dateInput.value) {
+        alert("Please select a date.");
+        return;
+    }
+    const dateVal = dateInput.value;
+
+    const actualCash = parseFloat(document.getElementById('actualCashInDrawer').value) || 0;
+    const cashTaken = parseFloat(document.getElementById('cashTakenOut').value) || 0;
+
+    const recordData = {
+        date: dateVal,
+        openingBalance: parseFloat(document.getElementById('cashOpeningBal').value) || 0,
+        extraAdded: parseFloat(document.getElementById('cashExtraAdded').value) || 0,
+        cashIncome: parseFloat(document.getElementById('cashIncomeToday').value) || 0,
+        gpayIncome: parseFloat(document.getElementById('gpayIncomeToday').value) || 0,
+        expenseTotal: parseFloat(document.getElementById('cashExpenseTotal').value) || 0,
+        cashTaken: cashTaken,
+        actualCashInDrawer: actualCash,
+        difference: parseFloat(document.getElementById('displayDifference').innerText.replace(/[₹,]/g, '')) || 0,
+        finalClosingBalance: actualCash - cashTaken,
+        updatedAt: new Date().toISOString()
+    };
+
+    try {
+        // Uses standard 'doc' directly
+        const docRef = doc(db, "daily_cash", dateVal);
+        await setDoc(docRef, recordData, { merge: true });
+        alert(`Daily cash closing for ${dateVal} saved & locked successfully!`);
+    } catch (err) {
+        alert("Error saving record: " + err.message);
+    }
+}
+window.refreshDailyCashTotals = function() {
+    const dateInput = document.getElementById('cashRegisterDate');
+    if (!dateInput || !dateInput.value) {
+        alert("Please select a date first.");
+        return;
+    }
+    const dateVal = dateInput.value;
+
+    // Recalculate live totals from services and expenses
+    let autoCashIncome = 0;
+    let autoGpayIncome = 0;
+    let autoExpenseTotal = 0;
+
+    const services = window.getAllServices ? window.getAllServices() : [];
+    services.forEach(s => {
+        const sDate = s.entryDate || s.date || s.serviceDate || (s.createdTimestamp ? s.createdTimestamp.split('T')[0] : '');
+        if (sDate === dateVal) {
+            const cashPart = parseFloat(s.cashAmount || 0);
+            const upiPart = parseFloat(s.upiAmount || 0);
+
+            if (cashPart === 0 && upiPart === 0) {
+                const total = parseFloat(s.totalFee || s.amount || s.fee || 0);
+                const paymentInfo = String(s.paymentStatus || s.paymentMode || '').toUpperCase();
+                if (paymentInfo.includes('UPI') || paymentInfo.includes('GPAY') || paymentInfo.includes('ONLINE')) {
+                    autoGpayIncome += total;
+                } else {
+                    autoCashIncome += total;
+                }
+            } else {
+                autoCashIncome += cashPart;
+                autoGpayIncome += upiPart;
+            }
+        }
+    });
+
+    const expenses = window.getAllExpenses ? window.getAllExpenses() : [];
+    expenses.forEach(e => {
+        const eDate = e.entryDate || e.date || e.expenseDate || (e.createdTimestamp ? e.createdTimestamp.split('T')[0] : '');
+        if (eDate === dateVal) {
+            autoExpenseTotal += parseFloat(e.amount || e.expense || e.cost || 0);
+        }
+    });
+
+    // Update only the income and expense fields with the newly added data
+    document.getElementById('cashIncomeToday').value = autoCashIncome;
+    document.getElementById('gpayIncomeToday').value = autoGpayIncome;
+    document.getElementById('cashExpenseTotal').value = autoExpenseTotal;
+
+    // Recalculate math
+    calculateCashRegister();
+    alert("Totals refreshed with newly added services/expenses! Review and click 'Save & Lock' to update.");
+}
+
+let masterServiceRates = [];
+
+// 1. Listen to live rate master changes from Firebase
+onSnapshot(collection(db, "service_rates"), (snapshot) => {
+    masterServiceRates = [];
+    snapshot.forEach(docSnap => {
+        masterServiceRates.push({ id: docSnap.id, ...docSnap.data() });
+    });
+    masterServiceRates.sort((a, b) => a.dept.localeCompare(b.dept) || a.name.localeCompare(b.name));
+    initQuickSelectDropdowns();
+});
+
+function initQuickSelectDropdowns() {
+    const deptSelect = document.getElementById('quickDeptSelect');
+    if (!deptSelect) return;
+
+    const depts = [...new Set(masterServiceRates.map(r => r.dept))];
+    deptSelect.innerHTML = `<option value="ALL">-- Filter by Department (${masterServiceRates.length}) --</option>`;
+    depts.forEach(d => {
+        deptSelect.innerHTML += `<option value="${d}">${d}</option>`;
+    });
+    filterQuickServiceDropdown();
+}
+
+window.filterQuickServiceDropdown = function() {
+    const selectedDept = document.getElementById('quickDeptSelect').value;
+    const serviceSelect = document.getElementById('quickServiceSelect');
+
+    // 1. Immediately update Category as soon as Department is selected
+    if (selectedDept !== "ALL") {
+        const cleanDept = selectedDept.trim().toUpperCase();
+        const mappedCategory = DEPT_TO_CATEGORY_MAP[cleanDept] || "Others";
+        const catDropdown = document.getElementById('serviceCategory');
+        if (catDropdown) catDropdown.value = mappedCategory;
+    }
+
+    // 2. Filter the Services dropdown
+    const filtered = selectedDept === "ALL" 
+        ? masterServiceRates 
+        : masterServiceRates.filter(r => r.dept.trim().toUpperCase() === selectedDept.trim().toUpperCase());
+
+    serviceSelect.innerHTML = `<option value="">-- Choose from Rate Master --</option>`;
+    filtered.forEach(s => {
+        serviceSelect.innerHTML += `<option value="${s.id}">${s.name} — ₹${s.rate}</option>`;
+    });
+
+    // Clear previous rate note when department changes
+    document.getElementById('quickRateNote').classList.add('hidden');
+};
+
+// 2. Auto-fill form fields when a rate master item is picked
+// Maps Rate Card Departments -> Your Existing 8 Reporting Categories
+const DEPT_TO_CATEGORY_MAP = {
+    // Govt & Citizen Portals
+    "AGRICULTURAL DEPT": "Govt & Citizen Portals",
+    "E TREASURY / LIMOMS": "Govt & Citizen Portals",
+    "FOOD SAFETY": "Govt & Citizen Portals",
+    "K SMART": "Govt & Citizen Portals",
+    "LABOUR DEPT": "Govt & Citizen Portals",
+    "MSME": "Govt & Citizen Portals",
+    "NORKA": "Govt & Citizen Portals",
+    "PENSION": "Govt & Citizen Portals",
+    "REVENUE": "Govt & Citizen Portals",
+    "THUNA": "Govt & Citizen Portals",
+    "OTHER DEPARTMENTS": "Govt & Citizen Portals",
+
+	"COUNTER & PRINTING SERVICES": "Counter & Printing Services",
+	
+    // Education & Exams
+    "EDUCATION": "Education & Exams",
+    "SCHOLARSHIP": "Education & Exams",
+
+    // Recruitment & Job Applications
+    "EMPLOYMENT EXCHANGE": "Recruitment & Job Applications",
+    "JOB APPLICATION": "Recruitment & Job Applications",
+
+    // Identity & Registrations
+    "NVSP (VOTERS)": "Identity & Registrations",
+    "PARIVAHAN": "Identity & Registrations",
+    "PANCARD": "Identity & Registrations",
+    "PASSPORT SEVA": "Identity & Registrations",
+    "REGISTRATION DEPT": "Identity & Registrations",
+    "SUPPLY OFFICE": "Identity & Registrations",
+
+    // Travel & Utility Services
+    "BILL PAYMENT": "Travel & Utility Services",
+    "BOOKING": "Travel & Utility Services",
+    "KSEB": "Travel & Utility Services",
+    "KERALA WATER AUTHORITY": "Travel & Utility Services",
+    "TICKET": "Travel & Utility Services",
+
+    // Financial & Insurance
+    "EDUCATION LOAN": "Financial & Insurance",
+    "PS/EPF": "Financial & Insurance",
+    "TAX": "Financial & Insurance"
+	
+	
+};
+
+window.applyQuickServiceRate = function() {
+    const selectedId = document.getElementById('quickServiceSelect').value;
+    const noteBox = document.getElementById('quickRateNote');
+
+    if (!selectedId) {
+        noteBox.classList.add('hidden');
+        return;
+    }
+
+    const item = masterServiceRates.find(r => r.id === selectedId);
+    if (!item) return;
+
+    // 1. Ensure Category matches (even if user picked directly from "All Departments")
+    const cleanDept = (item.dept || "").trim().toUpperCase();
+    document.getElementById('serviceCategory').value = DEPT_TO_CATEGORY_MAP[cleanDept] || "Others";
+
+    // 2. Auto-fill Service Name and Rate
+    document.getElementById('serviceName').value = item.name;
+    document.getElementById('serviceCharge').value = item.rate;
+    
+    // 3. Recalculate Total Fee
+    if (typeof calculateTotal === 'function') {
+        calculateTotal();
+    }
+
+    // 4. Show conditional note / rule if available
+    if (item.note && item.note.trim() !== "") {
+        noteBox.innerText = `Rate Note / Rule: ${item.note}`;
+        noteBox.classList.remove('hidden');
+    } else {
+        noteBox.classList.add('hidden');
+    }
+};
+    </script>
+
+    <!-- App UI & Business Logic Script -->
+    <script>
+        let currentRole = 'Staff'; // 'Staff' or 'Admin'
+        const ADMIN_PIN = 'Shetty@88'; // Security PIN for Owner Mode
+
+        let currentTab = 'services';
+        let currentFilter = 'ALL';
+        let categoryChartObj = null;
+
+       document.addEventListener("DOMContentLoaded", () => {
+            lucide.createIcons();
+            initChart();
+            updateRoleUI();
+            
+            // Set default date picker values to Today
+            const todayISO = new Date().toISOString().split('T')[0];
+            const entryDateEl = document.getElementById('entryDate');
+            const expDateEl = document.getElementById('expDate');
+            
+            if (entryDateEl) entryDateEl.value = todayISO;
+            if (expDateEl) expDateEl.value = todayISO;
+
+            // Render expenses immediately on page load
+            if (typeof filterAndRenderExpenses === 'function') {
+			    filterAndRenderExpenses();
+            }
+        });
+
+        function calculateTotal() {
+            const govt = parseFloat(document.getElementById('govtFee').value) || 0;
+            const charge = parseFloat(document.getElementById('serviceCharge').value) || 0;
+            document.getElementById('totalFee').value = govt + charge;
+        }
+
+       function togglePaymentStatusFields() {
+			const status = document.getElementById('paymentStatus').value;
+			const failedGroup = document.getElementById('failedPaymentGroup');
+			const splitGroup = document.getElementById('splitPaymentGroup');
+
+			if (status.includes('Failed') || status.includes('Refund')) {
+				failedGroup.classList.remove('hidden');
+			} else {
+				failedGroup.classList.add('hidden');
+			}
+
+			// Show cash and UPI inputs for Split payments OR Partial / Advance payments
+			if (status === 'Split (Cash & UPI)' || status === 'Partial') {
+				splitGroup.classList.remove('hidden');
+				
+				// Only auto-fill total on Split. For Partial, leave whatever value is there (or let user type).
+				if (status === 'Split (Cash & UPI)') {
+					const total = parseFloat(document.getElementById('totalFee').value) || 0;
+					const cashInput = document.getElementById('cashAmount');
+					if (!cashInput.value || cashInput.value === '0') {
+						cashInput.value = total;
+					}
+				}
+			} else {
+				splitGroup.classList.add('hidden');
+				// Optional: clear split inputs if switching to standard Paid/Unpaid so old numbers don't linger invisibly
+				// document.getElementById('cashAmount').value = '0';
+				// document.getElementById('upiAmount').value = '0';
+			}
+		}
+
+		function switchTab(tabName) {
+			document.getElementById('viewServices')?.classList.add('hidden');
+			document.getElementById('viewExpenses')?.classList.add('hidden');
+			document.getElementById('attendanceView')?.classList.add('hidden');
+			document.getElementById('cashRegisterView')?.classList.add('hidden');
+
+			const btnServices = document.getElementById('tabBtnServices');
+			const btnExpenses = document.getElementById('tabBtnExpenses');
+			const btnAttendance = document.getElementById('tabBtnAttendance');
+			const btnCashRegister = document.getElementById('tabBtnCashRegister');
+
+			if (btnServices) btnServices.className = "px-4 py-2 rounded-lg text-sm font-semibold text-slate-600 hover:bg-slate-200 flex items-center";
+			if (btnExpenses) btnExpenses.className = "px-4 py-2 rounded-lg text-sm font-semibold text-slate-600 hover:bg-slate-200 flex items-center";
+			if (btnAttendance) btnAttendance.className = "px-4 py-2 rounded-lg text-sm font-semibold text-slate-600 hover:bg-slate-200 flex items-center";
+			if (btnCashRegister) btnCashRegister.className = "px-4 py-2 rounded-lg text-sm font-semibold text-slate-600 hover:bg-slate-200 flex items-center";
+
+			if (tabName === 'services') {
+				document.getElementById('viewServices')?.classList.remove('hidden');
+				if (btnServices) btnServices.className = "px-4 py-2 rounded-lg text-sm font-semibold bg-indigo-900 text-white shadow-sm flex items-center";
+			} else if (tabName === 'expenses') {
+				document.getElementById('viewExpenses')?.classList.remove('hidden');
+				if (btnExpenses) btnExpenses.className = "px-4 py-2 rounded-lg text-sm font-semibold bg-indigo-900 text-white shadow-sm flex items-center";
+			} else if (tabName === 'attendance') {
+				document.getElementById('attendanceView')?.classList.remove('hidden');
+				if (btnAttendance) btnAttendance.className = "px-4 py-2 rounded-lg text-sm font-semibold bg-indigo-900 text-white shadow-sm flex items-center";
+				if (typeof initAttendanceModule === 'function') initAttendanceModule();
+			} else if (tabName === 'cashRegister') {
+				document.getElementById('cashRegisterView')?.classList.remove('hidden');
+            if (btnCashRegister) btnCashRegister.className = "px-4 py-2 rounded-lg text-sm font-semibold bg-indigo-900 text-white shadow-sm flex items-center";
+            
+            // Set today's date automatically if empty, then load data
+            const dateInput = document.getElementById('cashRegisterDate');
+            if (dateInput && !dateInput.value) {
+                dateInput.value = new Date().toISOString().split('T')[0];
+            }
+            if (typeof loadDailyCashData === 'function') loadDailyCashData();
+			}
+
+			if (typeof lucide !== 'undefined') lucide.createIcons();
+		}
+        function toggleRoleModal() {
+			const modal = document.getElementById('roleModal');
+			const pwdInput = document.getElementById('adminPasswordInput');
+			if (pwdInput) pwdInput.value = '';
+			modal.classList.toggle('hidden');
+			modal.classList.toggle('flex');
+		}
+
+        function verifyAndSwitchAdmin() {
+			const pwdInput = document.getElementById('adminPasswordInput');
+			const pin = pwdInput ? pwdInput.value : '';
+			
+			if (pin === ADMIN_PIN) {
+				currentRole = 'Admin';
+				if (pwdInput) pwdInput.value = '';
+				updateRoleUI();
+				toggleRoleModal();
+			} else {
+				if (pwdInput) pwdInput.value = '';
+				alert("Incorrect PIN/Password!");
+			}
+		}
+
+        function switchToStaffRole() {
+			currentRole = 'Staff';
+			const pwdInput = document.getElementById('adminPasswordInput');
+			if (pwdInput) pwdInput.value = '';
+			updateRoleUI();
+			toggleRoleModal();
+			if (currentTab === 'expenses') switchTab('services');
+		}
+
+      function updateRoleUI() {
+    document.getElementById('currentRoleText').innerText = currentRole === 'Admin' ? 'Owner (Admin)' : 'Staff Operator';
+    
+    const grossRevenueCard = document.getElementById('cardGrossRevenue');
+    const expensesCard = document.getElementById('cardExpenses');
+    const expenseTabContainer = document.getElementById('expenseTabContainer');
+    const attendanceTabContainer = document.getElementById('attendanceTabContainer');
+    const cashRegisterTabContainer = document.getElementById('cashRegisterTabContainer'); // Added
+    const csvContainer = document.getElementById('csvImportContainer');
+
+    if (currentRole === 'Admin') {
+        if (grossRevenueCard) grossRevenueCard.classList.remove('hidden');
+        if (expensesCard) expensesCard.classList.remove('hidden');
+        if (expenseTabContainer) expenseTabContainer.classList.remove('hidden');
+        if (attendanceTabContainer) attendanceTabContainer.classList.remove('hidden');
+        if (cashRegisterTabContainer) cashRegisterTabContainer.classList.remove('hidden'); // Added
+       // if (csvContainer) csvContainer.classList.remove('hidden');
+    } else {
+        if (grossRevenueCard) grossRevenueCard.classList.add('hidden');
+        if (expensesCard) grossRevenueCard.classList.add('hidden');
+        if (expenseTabContainer) grossRevenueCard.classList.add('hidden');
+        if (attendanceTabContainer) attendanceTabContainer.classList.add('hidden');
+        if (cashRegisterTabContainer) cashRegisterTabContainer.classList.add('hidden'); // Added
+       // if (csvContainer) csvContainer.classList.add('hidden');
+        
+        // If staff is currently on restricted tabs, switch them back to services
+        const expensesView = document.getElementById('viewExpenses');
+        const attendanceView = document.getElementById('attendanceView');
+        const cashRegisterView = document.getElementById('viewCashRegister'); // Update ID if your cash register view uses a different ID (e.g. cashRegisterView)
+        
+        if ((expensesView && !expensesView.classList.contains('hidden')) || 
+            (attendanceView && !attendanceView.classList.contains('hidden')) ||
+            (cashRegisterView && !cashRegisterView.classList.contains('hidden'))) {
+            switchTab('services');
+        }
+    }
+    renderUI();      
+}
+		
+		// Toggle clear button visibility and run search for Services
+		function handleSearchInput() {
+			const input = document.getElementById('searchInput');
+			const clearBtn = document.getElementById('clearSearchBtn');
+			if (input && clearBtn) {
+				if (input.value.trim().length > 0) {
+					clearBtn.classList.remove('hidden');
+				} else {
+					clearBtn.classList.add('hidden');
+				}
+			}
+			renderUI();
+		}
+
+		// Toggle clear button visibility and run search for Expenses
+		function handleExpenseSearchInput() {
+			const input = document.getElementById('expenseSearchInput');
+			const clearBtn = document.getElementById('clearExpenseSearchBtn');
+			if (input && clearBtn) {
+				if (input.value.trim().length > 0) {
+					clearBtn.classList.remove('hidden');
+				} else {
+					clearBtn.classList.add('hidden');
+				}
+			}
+			filterAndRenderExpenses();
+		}
+
+		// Universal clear function for the input boxes
+		function clearSearch(inputId) {
+			const input = document.getElementById(inputId);
+			if (input) {
+				input.value = '';
+				if (inputId === 'searchInput') {
+					document.getElementById('clearSearchBtn').classList.add('hidden');
+					renderUI();
+				} else if (inputId === 'expenseSearchInput') {
+					document.getElementById('clearExpenseSearchBtn').classList.add('hidden');
+					filterAndRenderExpenses();
+				}
+				input.focus();
+			}
+		}
+
+        function handleDateRangeChange() {
+            const val = document.getElementById('dateRangeSelect').value;
+            const customBox = document.getElementById('customDateInputs');
+            if (val === 'CUSTOM') {
+                customBox.classList.remove('hidden');
+            } else {
+                customBox.classList.add('hidden');
+            }
+            renderUI();
+        }
+		
+		async function markAsPaid(id) {
+			const services = window.getAllServices ? window.getAllServices() : [];
+			const item = services.find(s => s.id === id);
+			if (!item) return;
+
+			const now = new Date();
+			let logs = item.activityLogs ? [...item.activityLogs] : [];
+			
+			logs.push({
+				timestamp: now.toISOString(),
+				text: `Payment cleared later (Marked as Paid by ${currentRole})`,
+				type: 'payment_change'
+			});
+
+			const updatedData = {
+				...item,
+				paymentStatus: 'Paid (Cash)',
+				cashAmount: item.totalFee,
+				upiAmount: 0,
+				updatedTimestamp: now.toISOString(),
+				activityLogs: logs
+			};
+
+			try {
+				await window.saveServiceEntry(updatedData);
+				renderUI();
+			} catch (err) {
+				alert("Error updating payment: " + err.message);
+			}
+		}
+
+        function handleMobileLookup(val) {
+            const dropdown = document.getElementById('customerSuggestions');
+            if (!val || val.length < 3) {
+                dropdown.classList.add('hidden');
+                return;
+            }
+
+            const services = window.getAllServices ? window.getAllServices() : [];
+            const matches = [];
+            const seenMobiles = new Set();
+
+            services.forEach(item => {
+                if (item.custMobile && item.custMobile.includes(val) && !seenMobiles.has(item.custMobile)) {
+                    seenMobiles.add(item.custMobile);
+                    matches.push({ name: item.custName, mobile: item.custMobile });
+                }
+            });
+
+            if (matches.length > 0) {
+                dropdown.innerHTML = matches.map(m => `
+                    <div onclick="selectCustomer('${m.name}', '${m.mobile}')" class="p-2.5 hover:bg-indigo-50 cursor-pointer border-b border-slate-100 last:border-0 flex justify-between items-center text-xs">
+                        <span class="font-semibold text-slate-800">${m.name}</span>
+                        <span class="text-indigo-600 font-mono">${m.mobile}</span>
+                    </div>
+                `).join('');
+                dropdown.classList.remove('hidden');
+            } else {
+                dropdown.classList.add('hidden');
+            }
+        }
+
+        function selectCustomer(name, mobile) {
+            document.getElementById('custName').value = name;
+            document.getElementById('custMobile').value = mobile;
+            document.getElementById('customerSuggestions').classList.add('hidden');
+        }
+
+        function quickWalkInModal() {
+            openServiceModal();
+            document.getElementById('custName').value = 'Walk-In Customer';
+            document.getElementById('custMobile').value = '0000000000';
+            document.getElementById('serviceCategory').value = 'Counter & Printing Services';
+            document.getElementById('serviceName').value = 'Photocopy / Quick Print';
+            document.getElementById('govtFee').value = '0';
+            document.getElementById('serviceCharge').value = '10';
+            document.getElementById('totalFee').value = '10';
+            document.getElementById('appStatus').value = 'Delivered';
+        }
+
+        function extractStandardDate(item) {
+            if (item.entryDate) return item.entryDate;
+            if (item.timestamp) return item.timestamp.split('T')[0];
+            if (item.dateStr) {
+                const parts = item.dateStr.split('/');
+                if (parts.length === 3) return `${parts[2]}-${parts[1]}-${parts[0]}`;
+            }
+            return new Date().toISOString().split('T')[0];
+        }
+
+        function isDateInSelectedRange(item) {
+            const itemDateISO = extractStandardDate(item);
+            if (!itemDateISO) return true;
+            
+            const selectVal = document.getElementById('dateRangeSelect').value;
+            const now = new Date();
+            const todayStr = now.toISOString().split('T')[0];
+
+            if (selectVal === 'TODAY') {
+                return itemDateISO === todayStr;
+            } else if (selectVal === 'YESTERDAY') {
+                const yest = new Date(now);
+                yest.setDate(yest.getDate() - 1);
+                return itemDateISO === yest.toISOString().split('T')[0];
+            } else if (selectVal === 'THIS_MONTH') {
+                const currentMonth = todayStr.slice(0, 7);
+                return itemDateISO.startsWith(currentMonth);
+            } else if (selectVal === 'CUSTOM') {
+                const start = document.getElementById('customStartDate').value;
+                const end = document.getElementById('customEndDate').value;
+                if (start && itemDateISO < start) return false;
+                if (end && itemDateISO > end) return false;
+                return true;
+            }
+            return true;
+        }
+		
+        function openServiceModal(id = null) {
+			const modal = document.getElementById('serviceModal');
+			if (modal) {
+				// Remove 'hidden' so it appears, keeping flex centering intact
+				modal.classList.remove('hidden');
+			}
+
+			// Reset form fields
+			const form = document.getElementById('serviceForm');
+			if (form) form.reset();
+			
+			document.getElementById('editServiceId').value = '';
+			document.getElementById('entryDate').value = new Date().toISOString().split('T')[0];
+
+			const logContainer = document.getElementById('historyLogContainer');
+			const logList = document.getElementById('historyLogList');
+
+			if (id) {
+				document.getElementById('editServiceId').value = id;
+				const services = window.getAllServices ? window.getAllServices() : [];
+				const item = services.find(s => s.id === id);
+
+				if (item) {
+					// Populate form fields with existing record data
+					document.getElementById('entryDate').value = item.entryDate || '';
+					document.getElementById('custMobile').value = item.custMobile || '';
+					document.getElementById('custName').value = item.custName || '';
+					document.getElementById('serviceCategory').value = item.serviceCategory || 'Others';
+					document.getElementById('serviceName').value = item.serviceName || '';
+					document.getElementById('refId').value = item.refId || '';
+					document.getElementById('govtFee').value = item.govtFee || 0;
+					document.getElementById('serviceCharge').value = item.serviceCharge || 0;
+					document.getElementById('totalFee').value = item.totalFee || 0;
+					document.getElementById('paymentStatus').value = item.paymentStatus || 'Paid (Cash)';
+					
+					// ADD THESE TWO LINES SO SAVED PARTIAL/SPLIT AMOUNTS LOAD CORRECTLY:
+					document.getElementById('cashAmount').value = item.cashAmount || 0;
+					document.getElementById('upiAmount').value = item.upiAmount || 0;
+
+					document.getElementById('appStatus').value = item.appStatus || 'Delivered';
+					document.getElementById('remarks').value = item.remarks || '';
+
+					// Handle Split & Failed Payment field visibility if applicable
+					if (typeof togglePaymentStatusFields === 'function') {
+						togglePaymentStatusFields();
+					}
+
+					// Audit Trail Visibility: ONLY visible to Admin when editing an existing record
+					if (currentRole === 'Admin') {
+						if (logContainer) logContainer.classList.remove('hidden');
+						
+						if (item.activityLogs && item.activityLogs.length > 0) {
+							logList.innerHTML = item.activityLogs.map(log => {
+								const dateStr = new Date(log.timestamp).toLocaleString();
+								return `<div class="py-0.5"><span class="text-slate-400">[${dateStr}]</span> ${log.text}</div>`;
+							}).join('');
+						} else {
+							logList.innerHTML = `<div class="text-slate-400 italic">No activity logs recorded for this legacy entry yet.</div>`;
+						}
+					} else {
+						// Hide audit trail for Staff operators even when editing
+						if (logContainer) logContainer.classList.add('hidden');
+					}
+				}
+			} else {
+				// Brand new entry -> always hide the audit trail container
+				if (logContainer) logContainer.classList.add('hidden');
+			}
+		}
+
+        function closeServiceModal() {
+            document.getElementById('serviceModal').classList.add('hidden');
+            document.getElementById('serviceModal').classList.remove('flex');
+        }
+
+       async function handleServiceSubmit(e) {
+			e.preventDefault();
+			const id = document.getElementById('editServiceId').value;
+			const now = new Date();
+			
+			const currentDateStr = document.getElementById('entryDate').value;
+			const currentTimeStr = now.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+
+			const services = window.getAllServices ? window.getAllServices() : [];
+			const existingItem = id ? services.find(s => s.id === id) : null;
+
+			// Build or inherit existing logs array
+			let logs = existingItem && existingItem.activityLogs ? [...existingItem.activityLogs] : [];
+			
+			const newAppStatus = document.getElementById('appStatus').value;
+			const newPaymentStatus = document.getElementById('paymentStatus').value;
+
+			if (!existingItem) {
+				logs.push({
+					timestamp: now.toISOString(),
+					text: `Service entry created by ${currentRole}`,
+					type: 'create'
+				});
+			} else {
+				// Track changes if status or payment updated
+				if (existingItem.appStatus !== newAppStatus) {
+					logs.push({
+						timestamp: now.toISOString(),
+						text: `App Status changed: "${existingItem.appStatus}" ➡️ "${newAppStatus}" (${currentRole})`,
+						type: 'status_change'
+					});
+				}
+				if (existingItem.paymentStatus !== newPaymentStatus) {
+					logs.push({
+						timestamp: now.toISOString(),
+						text: `Payment Status updated: "${existingItem.paymentStatus}" ➡️ "${newPaymentStatus}" (${currentRole})`,
+						type: 'payment_change'
+					});
+				}
+				if (existingItem.totalFee !== parseFloat(document.getElementById('totalFee').value)) {
+					logs.push({
+						timestamp: now.toISOString(),
+						text: `Fee modified from ₹${existingItem.totalFee} to ₹${document.getElementById('totalFee').value} (${currentRole})`,
+						type: 'edit'
+					});
+				}
+			}
+
+			const data = {
+				entryDate: currentDateStr,
+				entryTime: existingItem && existingItem.entryTime ? existingItem.entryTime : currentTimeStr,
+				createdTimestamp: existingItem && existingItem.createdTimestamp ? existingItem.createdTimestamp : now.toISOString(),
+				updatedTimestamp: now.toISOString(),
+				activityLogs: logs, // Save the complete audit trail
+
+				custName: document.getElementById('custName').value.trim(),
+				custMobile: document.getElementById('custMobile').value.trim(),
+				serviceCategory: document.getElementById('serviceCategory').value,
+				serviceName: document.getElementById('serviceName').value.trim(),
+				refId: document.getElementById('refId').value.trim(),
+				govtFee: parseFloat(document.getElementById('govtFee').value) || 0,
+				serviceCharge: parseFloat(document.getElementById('serviceCharge').value) || 0,
+				totalFee: parseFloat(document.getElementById('totalFee').value) || 0,
+				paymentStatus: newPaymentStatus,
+				cashAmount: parseFloat(document.getElementById('cashAmount').value) || 0,
+				upiAmount: parseFloat(document.getElementById('upiAmount').value) || 0,
+				appStatus: newAppStatus,
+				failedTxnId: document.getElementById('failedTxnId').value.trim(),
+				refundClaimStatus: document.getElementById('refundClaimStatus').value,
+				remarks: document.getElementById('remarks').value.trim(),
+				loggedBy: currentRole
+			};
+			if (id) data.id = id;
+
+			try {
+				await window.saveServiceEntry(data);
+				closeServiceModal();
+			} catch (err) {
+				alert("Error saving service: " + err.message);
+			}
+		}
+
+        
+	// 1. Open Expense Modal (Handles both New Entry and Editing)
+	function openExpenseModal(id = null) {
+		const modal = document.getElementById('expenseModal');
+		if (modal) modal.classList.remove('hidden');
+		
+		const form = document.getElementById('expenseForm');
+		if (form) form.reset();
+		
+		document.getElementById('editExpenseId').value = '';
+		document.getElementById('expDate').value = new Date().toISOString().split('T')[0];
+		
+		if (id) {
+			document.getElementById('expenseModalTitle').innerText = 'Edit Shop Expense';
+			const expenses = window.getAllExpenses ? window.getAllExpenses() : [];
+			const item = expenses.find(e => e.id === id);
+			
+			if (item) {
+				document.getElementById('editExpenseId').value = item.id;
+				document.getElementById('expDate').value = item.date || '';
+				document.getElementById('expCategory').value = item.category || 'Miscellaneous';
+				
+				// Fallback for older entries that used description or notes instead of vendor
+				document.getElementById('expVendor').value = item.vendor || item.description || '';
+				document.getElementById('expAmount').value = item.amount || 0;
+				document.getElementById('expPaymentMode').value = item.paymentMode || 'Cash';
+				document.getElementById('expNotes').value = item.notes || '';
+			}
+		} else {
+			document.getElementById('expenseModalTitle').innerText = 'Add Shop Expense';
+		}
+		filterAndRenderExpenses();
+	}
+
+	// 2. Close Expense Modal
+	function closeExpenseModal() {
+		const modal = document.getElementById('expenseModal');
+		if (modal) modal.classList.add('hidden');
+	}
+
+	// 3. Handle Expense Submission (Saves new or updates existing)
+	async function handleExpenseSubmit(e) {
+		e.preventDefault();
+		const id = document.getElementById('editExpenseId').value;
+		const now = new Date();
+
+		const expenseDateVal = document.getElementById('expDate').value;
+		const vendorVal = document.getElementById('expVendor').value.trim();
+
+		const expenseData = {
+			date: expenseDateVal,
+			expDate: expenseDateVal, // Ensures expDate is explicitly saved
+			category: document.getElementById('expCategory').value,
+			vendor: vendorVal,
+			title: vendorVal, // Fallback or direct mapping for title if needed
+			amount: parseFloat(document.getElementById('expAmount').value) || 0,
+			paymentMode: document.getElementById('expPaymentMode').value,
+			notes: document.getElementById('expNotes').value.trim(),
+			loggedBy: typeof currentRole !== 'undefined' ? currentRole : 'Admin',
+			timestamp: now.toISOString()
+		};
+		
+		if (id && id.trim() !== '') {
+			expenseData.id = id;
+		}
+
+		try {
+			if (typeof window.saveExpenseEntry === 'function') {
+				await window.saveExpenseEntry(expenseData);
+			}
+			closeExpenseModal();
+			filterAndRenderExpenses();
+		} catch (err) {
+			alert("Error saving expense: " + err.message);
+		}
+	}
+	// 4. Search, Filter, and Sort Controller
+	function filterAndRenderExpenses() {
+		const searchTerm = document.getElementById('expenseSearchInput').value.toLowerCase();
+		const sortMode = document.getElementById('expenseSortSelect').value;
+		
+		let expenses = window.getAllExpenses ? window.getAllExpenses() : [];
+
+		// Filter by search keyword
+		let filtered = expenses.filter(item => {
+			const vendor = (item.vendor || '').toLowerCase();
+			const category = (item.category || '').toLowerCase();
+			const notes = (item.notes || '').toLowerCase();
+			return vendor.includes(searchTerm) || category.includes(searchTerm) || notes.includes(searchTerm);
+		});
+
+		// Sort data based on dropdown
+		filtered.sort((a, b) => {
+			if (sortMode === 'date_desc') return new Date(b.date) - new Date(a.date);
+			if (sortMode === 'date_asc') return new Date(a.date) - new Date(b.date);
+			if (sortMode === 'amount_desc') return b.amount - a.amount;
+			if (sortMode === 'amount_asc') return a.amount - b.amount;
+		});
+
+		renderExpenseTableUI(filtered);
+	}
+
+		// Render Table Rows UI
+		function renderExpenseTableUI(expenses) {
+			const tbody = document.getElementById('expensesTableBody');
+			if (!tbody) return;
+
+			if (!expenses || expenses.length === 0) {
+				tbody.innerHTML = `<tr><td colspan="8" class="p-8 text-center text-slate-400 italic">No expenses found.</td></tr>`;
+				return;
+			}
+
+			tbody.innerHTML = expenses.map(item => `
+				<tr class="hover:bg-slate-50 transition border-b border-slate-100">
+					<td class="p-4 font-medium">${item.date || ''}</td>
+					<td class="p-4"><span class="px-2 py-0.5 bg-slate-100 text-slate-600 rounded text-[11px] font-semibold">${item.category || ''}</span></td>
+					<td class="p-4 font-bold text-slate-800">${item.vendor || item.description || item.notes || '-'}</td>
+					<td class="p-4 text-slate-600">${item.paymentMode || 'Cash'}</td>
+					<td class="p-4 text-slate-500">${item.notes || '-'}</td>
+					<td class="p-4 text-right font-bold text-rose-600">₹${(item.amount || 0).toFixed(2)}</td>
+					<td class="p-4 text-center text-slate-500">${item.loggedBy || 'Admin'}</td>
+					<td class="p-4 text-center space-x-2 no-print">
+						<button onclick="openExpenseModal('${item.id}')" class="text-indigo-600 hover:text-indigo-800 font-semibold">Edit</button>
+						${typeof currentRole !== 'undefined' && currentRole === 'Admin' ? `<button onclick="deleteExpenseEntry('${item.id}')" class="text-rose-500 hover:text-rose-700 font-semibold">Delete</button>` : ''}
+					</td>
+				</tr>
+			`).join('');
+		}
+
+		// When switching to the expenses tab or loading data:
+		function loadAndRenderExpenses() {
+			// Fetch or sync your expenses data here if needed, then:
+			filterAndRenderExpenses();
+		}
+
+       function setFilterStatus(status) {
+			currentFilter = status;
+
+			// Map each button ID suffix to its corresponding filter value
+			const filterMappings = [
+				{ id: 'All', val: 'ALL' },
+				{ id: 'Govt', val: 'Submitted to Govt' },
+				{ id: 'InProgress', val: 'In Progress' },
+				{ id: 'Failed', val: 'FAILED' },
+				{ id: 'Unpaid', val: 'UNPAID' }
+			];
+
+			filterMappings.forEach(item => {
+				const el = document.getElementById('btnFilter' + item.id);
+				if (el) {
+					if (item.val === status) {
+						// Highlighted active style (white pill background with shadow)
+						el.className = "px-3 py-1.5 rounded-md bg-white shadow-sm text-slate-800 font-semibold transition";
+					} else {
+						// Inactive style
+						el.className = "px-3 py-1.5 rounded-md text-slate-600 hover:text-slate-900 transition";
+					}
+				}
+			});
+
+			renderUI();
+		}
+
+        function renderUI() {
+            const services = window.getAllServices ? window.getAllServices() : [];
+            const expenses = window.getAllExpenses ? window.getAllExpenses() : [];
+            const searchTerm = (document.getElementById('searchInput')?.value || '').toLowerCase().trim();
+
+            let totalRevenue = 0;
+            let totalServicesCount = 0;
+            let pendingDuesTotal = 0;
+            let unpaidCount = 0;
+            let failedCount = 0;
+            let failedAmount = 0;
+            let readyCompletedCount = 0;
+			
+			// 1. Control Table Header Visibility based on Role
+			const thUpdatedHeader = document.getElementById('thUpdatedHeader');
+			if (thUpdatedHeader) {
+				if (currentRole === 'Admin') {
+					thUpdatedHeader.style.setProperty('display', 'table-cell', 'important');
+				} else {
+					thUpdatedHeader.style.setProperty('display', 'none', 'important');
+				}
+			}
+
+            const categoryCounts = {};
+            const customerVisits = {};
+			
+			const expenseContainer = document.getElementById('expenseContainer');
+			if (expenseContainer) {
+				if (currentRole === 'Admin') {
+					expenseContainer.style.setProperty('display', 'inline-block', 'important');
+				} else {
+					expenseContainer.style.setProperty('display', 'none', 'important');
+				}
+			}
+			
+            services.forEach(s => {
+                if (s.custMobile && s.custMobile !== '0000000000') {
+                    customerVisits[s.custMobile] = (customerVisits[s.custMobile] || 0) + 1;
+                }
+            });
+
+           window.filteredServices = services.filter(item => {
+				const dateMatch = isDateInSelectedRange(item);
+
+				if (dateMatch) {
+					totalServicesCount++;
+					if (item.paymentStatus !== 'Unpaid' && !item.paymentStatus.includes('Failed')) {
+					
+						if (item.paymentStatus === 'Partial') {
+							// Option A1: Only add revenue if the cash/UPI paid covers the service charge, 
+							// or add a proportional amount of the service charge.
+							const paidSoFar = (item.cashAmount || 0) + (item.upiAmount || 0);
+							const serviceCharge = item.serviceCharge || 0;
+							const totalFee = item.totalFee || 1; // avoid division by zero
+							
+							// Proportional revenue based on what percentage of the total fee was paid
+							const paidRatio = Math.min(1, paidSoFar / totalFee);
+							totalRevenue += (serviceCharge * paidRatio);
+						} else {
+							// Standard Paid (Cash, UPI, Split)
+							totalRevenue += (item.serviceCharge || 0);
+						}
+					}
+					if (item.appStatus === 'Delivered' || item.appStatus === 'Ready for Pickup') {
+						readyCompletedCount++;
+					}
+					if (item.paymentStatus === 'Unpaid') {
+						pendingDuesTotal += (item.totalFee || 0);
+						unpaidCount++;
+					}
+					// Handle Partial Payments / Advance Dues
+					if (item.paymentStatus === 'Partial') {
+						const total = item.totalFee || 0;
+						const paidSoFar = (item.cashAmount || 0) + (item.upiAmount || 0);
+						const balanceDue = Math.max(0, total - paidSoFar);
+						pendingDuesTotal += balanceDue;
+						unpaidCount++;
+					}
+					if (item.paymentStatus.includes('Failed') || item.paymentStatus.includes('Refund')) {
+						failedCount++;
+						failedAmount += (item.totalFee || 0);
+					}
+				}
+
+				const cat = item.serviceCategory || 'Others';
+				categoryCounts[cat] = (categoryCounts[cat] || 0) + 1;
+
+				const searchMatch = !searchTerm || 
+					(item.custName && item.custName.toLowerCase().includes(searchTerm)) ||
+					(item.custMobile && item.custMobile.includes(searchTerm)) ||
+					(item.refId && item.refId.toLowerCase().includes(searchTerm)) ||
+					(item.serviceName && item.serviceName.toLowerCase().includes(searchTerm));
+
+				let filterMatch = true;
+				if (currentFilter === 'Submitted to Govt') filterMatch = item.appStatus === 'Submitted to Govt';
+				else if (currentFilter === 'In Progress') filterMatch = item.appStatus === 'In Progress';
+				else if (currentFilter === 'FAILED') filterMatch = item.paymentStatus.includes('Failed') || item.paymentStatus.includes('Refund');
+				else if (currentFilter === 'UNPAID') filterMatch = item.paymentStatus === 'Unpaid' || item.paymentStatus === 'Partial';
+
+				return dateMatch && searchMatch && filterMatch;
+			});
+			// Replace your existing window.filteredServices.sort(...) block with this:
+			const sortOption = document.getElementById('sortSelect')?.value || 'date_desc';
+
+			window.filteredServices.sort((a, b) => {
+				const sortOption = document.getElementById('sortSelect')?.value || 'date_desc';
+
+				if (sortOption === 'date_desc' || sortOption === 'date_asc') {
+					const timeA = parseDateTimeToTimestamp(extractStandardDate(a), a.entryTime);
+					const timeB = parseDateTimeToTimestamp(extractStandardDate(b), b.entryTime);
+					return sortOption === 'date_desc' ? timeB - timeA : timeA - timeB;
+				}
+				else if (sortOption === 'amount_desc' || sortOption === 'amount_asc') {
+					const amtA = parseFloat(a.totalFee) || 0;
+					const amtB = parseFloat(b.totalFee) || 0;
+					return sortOption === 'amount_desc' ? amtB - amtA : amtA - amtB;
+				} 
+				else if (sortOption === 'name_asc') {
+					const nameA = (a.custName || '').toLowerCase();
+					const nameB = (b.custName || '').toLowerCase();
+					return nameA.localeCompare(nameB);
+				}
+				else if (sortOption === 'payment_status') {
+					const statusA = (a.paymentStatus || '').toLowerCase();
+					const statusB = (b.paymentStatus || '').toLowerCase();
+					return statusA.localeCompare(statusB);
+				}
+				return 0;
+			});
+			
+            let totalExpenses = 0;
+            let expenseCount = 0;
+            expenses.forEach(e => {
+                const expDateISO = e.expDate || (e.timestamp ? e.timestamp.split('T')[0] : '');
+                if (!expDateISO || isDateInSelectedRange({ entryDate: expDateISO })) {
+                    totalExpenses += (e.amount || 0);
+                    expenseCount++;
+                }
+            });
+
+            document.getElementById('statTodayRevenue').innerText = `₹${totalRevenue.toLocaleString('en-IN')}`;
+            document.getElementById('statTodayCount').innerText = `${totalServicesCount} entries in period`;
+            
+            const expTotalEl = document.getElementById('statExpensesTotal');
+            if (expTotalEl) expTotalEl.innerText = `₹${totalExpenses.toLocaleString('en-IN')}`;
+            
+            const expCountEl = document.getElementById('statExpensesCount');
+            if (expCountEl) expCountEl.innerText = `${expenseCount} expense entries`;
+
+            document.getElementById('statPendingDues').innerText = `₹${pendingDuesTotal.toLocaleString('en-IN')}`;
+            document.getElementById('statUnpaidCount').innerText = `${unpaidCount} unpaid transactions`;
+            document.getElementById('statFailedCount').innerText = failedCount;
+            document.getElementById('statFailedAmount').innerText = `₹${failedAmount.toLocaleString('en-IN')} stuck in failed payment`;
+            document.getElementById('statReadyCount').innerText = readyCompletedCount;
+			
+			
+
+            // 2. Adjust Empty State Colspan dynamically (10 for Admin, 9 for Staff)
+			const activeColSpan = currentRole === 'Admin' ? 10 : 9;
+			const sBody = document.getElementById('servicesTableBody');
+
+            if (window.filteredServices.length === 0) {
+                sBody.innerHTML = `<tr><td colspan="9" class="p-8 text-center text-slate-400">No service records found for the selected period/filter.</td></tr>`;
+            } else {
+                sBody.innerHTML = window.filteredServices.map(item => {
+                    const visits = customerVisits[item.custMobile] || 1;
+                    const repeatTag = visits > 1 ? `<span class="text-[10px] bg-indigo-50 text-indigo-600 px-1.5 py-0.5 rounded font-medium border border-indigo-100 ml-1">Repeat (${visits})</span>` : '';
+                    const displayDate = extractStandardDate(item);
+					const displayTime = item.entryTime || (item.timestamp ? new Date(item.timestamp).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) : '');
+                    
+					let paymentBadge = `<span class="px-2 py-0.5 text-xs rounded-full bg-emerald-100 text-emerald-700 font-medium">${item.paymentStatus}</span>`;
+                    if (item.paymentStatus === 'Unpaid') {
+                        paymentBadge = `<span class="px-2 py-0.5 text-xs rounded-full bg-amber-100 text-amber-700 font-semibold">Unpaid</span>`;
+                    } else if (item.paymentStatus.includes('Failed') || item.paymentStatus.includes('Refund')) {
+                        paymentBadge = `<span class="px-2 py-0.5 text-xs rounded-full bg-rose-100 text-rose-700 font-semibold">${item.paymentStatus}</span>`;
+                    }
+
+                    let statusBadge = `<span class="px-2 py-0.5 text-xs rounded-full bg-indigo-100 text-indigo-700 font-medium">${item.appStatus}</span>`;
+                    if (item.appStatus === 'Submitted to Govt') statusBadge = `<span class="px-2 py-0.5 text-xs rounded-full bg-amber-100 text-amber-800 font-medium">Submitted to Govt</span>`;
+                    if (item.appStatus === 'Ready for Pickup') statusBadge = `<span class="px-2 py-0.5 text-xs rounded-full bg-emerald-100 text-emerald-800 font-semibold">Ready for Pickup</span>`;
+
+					// 3. Conditionally generate the Updated Time cell only for Admin
+					let updatedCellHtml = '';
+					if (currentRole === 'Admin') {
+						let updatedDisplay = '—';
+						if (item.updatedTimestamp) {
+							const updateDateObj = new Date(item.updatedTimestamp);
+							const upDate = updateDateObj.toISOString().split('T')[0];
+							const upTime = updateDateObj.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+							updatedDisplay = `<div class="font-semibold text-slate-700">${upDate}</div><div class="text-xs text-slate-500 font-mono">${upTime}</div>`;
+						}
+						updatedCellHtml = `<td class="p-4">${updatedDisplay}</td>`;
+					}
+                    const deleteBtn = currentRole === 'Admin' ? `
+                        <button onclick="window.deleteServiceEntry('${item.id}')" title="Delete" class="p-1.5 text-rose-600 hover:bg-rose-50 rounded-md">
+                            <i data-lucide="trash-2" class="w-4 h-4"></i>
+                        </button>
+                    ` : '';
+
+                    return `
+						<tr class="hover:bg-slate-50 transition">
+							<td class="p-4">
+								<div class="font-semibold text-slate-800">${displayDate}</div>
+								<div class="text-xs text-slate-500 font-mono">${displayTime}</div>
+							</td>
+							${updatedCellHtml} <!-- Only renders if Admin -->
+							<td class="p-4">
+								<div class="font-semibold text-slate-800 flex items-center">${item.custName} ${repeatTag}</div>
+								<div class="text-xs text-slate-500">${item.custMobile}</div>
+							</td>
+							<td class="p-4">
+								<div class="font-medium text-slate-700">${item.serviceName}</div>
+								<div class="text-xs text-indigo-600 font-mono">${item.refId || 'N/A'}</div>
+							</td>
+							<td class="p-4 text-right text-slate-600">₹${item.govtFee || 0}</td>
+							<td class="p-4 text-right text-slate-600">₹${item.serviceCharge || 0}</td>
+							<td class="p-4 text-right font-bold text-slate-800">₹${item.totalFee || 0}</td>
+							<td class="p-4 text-center">${paymentBadge}</td>
+							<td class="p-4 text-center">${statusBadge}</td>
+							<td class="p-4 text-center no-print">
+								<div class="flex items-center justify-center space-x-1">
+									${item.paymentStatus === 'Unpaid' ? `
+										<button onclick="window.markAsPaid('${item.id}')" title="Mark as Paid" class="p-1.5 text-emerald-600 hover:bg-emerald-50 rounded-md">
+											<i data-lucide="check-square" class="w-4 h-4"></i>
+										</button>
+									` : ''}
+									<button onclick="openServiceModal('${item.id}')" title="Edit" class="p-1.5 text-slate-600 hover:bg-slate-100 rounded-md">
+										<i data-lucide="edit-3" class="w-4 h-4"></i>
+									</button>
+									${deleteBtn}
+								</div>
+							</td>
+						</tr>
+					`;
+				}).join('');
+            }
+
+            const filteredExpenses = expenses.filter(e => {
+                const expDateISO = e.expDate || (e.timestamp ? e.timestamp.split('T')[0] : '');
+                return !expDateISO || isDateInSelectedRange({ entryDate: expDateISO });
+            });
+
+            const eBody = document.getElementById('expensesTableBody');
+            if (filteredExpenses.length === 0) {
+                eBody.innerHTML = `<tr><td colspan="6" class="p-8 text-center text-slate-400">No shop expenses logged for this period.</td></tr>`;
+            } else {
+                eBody.innerHTML = filteredExpenses.map(item => {
+                    return `
+                        <tr class="hover:bg-slate-50 transition">
+                           <td class="p-4 font-medium">${item.date || ''}</td>
+							<td class="p-4"><span class="px-2 py-0.5 bg-slate-100 text-slate-600 rounded text-[11px] font-semibold">${item.category || ''}</span></td>
+							<td class="p-4 font-bold text-slate-800">${item.vendor || item.description || item.notes || '-'}</td>
+							<td class="p-4 text-slate-600">${item.paymentMode || 'Cash'}</td>
+							<td class="p-4 text-slate-500">${item.notes || '-'}</td>
+							<td class="p-4 text-right font-bold text-rose-600">₹${(item.amount || 0).toFixed(2)}</td>
+							<td class="p-4 text-center text-slate-500">${item.loggedBy || 'Admin'}</td>
+							<td class="p-4 text-center space-x-2 no-print">
+								<button onclick="openExpenseModal('${item.id}')" class="text-indigo-600 hover:text-indigo-800 font-semibold">Edit</button>
+								${typeof currentRole !== 'undefined' && currentRole === 'Admin' ? `<button onclick="deleteExpenseEntry('${item.id}')" class="text-rose-500 hover:text-rose-700 font-semibold">Delete</button>` : ''}
+							</td>
+					
+                        </tr>
+                    `;
+                }).join('');
+            }
+
+			// Refresh attendance module if it's currently active/visible
+            const attendanceView = document.getElementById('attendanceView');
+            if (attendanceView && !attendanceView.classList.contains('hidden')) {
+                if (typeof loadAttendanceForDate === 'function') loadAttendanceForDate();
+                if (typeof renderMonthlySalarySummary === 'function') renderMonthlySalarySummary();
+            }
+			
+            lucide.createIcons();
+            updateChart(categoryCounts);
+        }
+		// Update your getter to patch legacy items on-the-fly:
+		window.getAllExpenses = () => patchLegacyExpenses(allExpenses);
+
+		// The auto-repair helper function (keep this in your script):
+		function patchLegacyExpenses(expensesArray) {
+			if (!Array.isArray(expensesArray)) return [];
+			
+			return expensesArray.map((item, index) => {
+				if (!item.id) {
+					item.id = 'exp_legacy_' + (item.date || 'nodate') + '_' + index + '_' + Math.random().toString(36).substring(2, 7);
+				}
+				return item;
+			});
+		}
+
+        function initChart() {
+            const ctx = document.getElementById('categoryChart').getContext('2d');
+            categoryChartObj = new Chart(ctx, {
+                type: 'doughnut',
+                data: {
+                    labels: [],
+                    datasets: [{
+                        data: [],
+                        backgroundColor: ['#6366f1', '#10b981', '#f59e0b', '#ec4899', '#8b5cf6', '#3b82f6', '#64748b']
+                    }]
+                },
+                options: {
+                    responsive: true,
+                    maintainAspectRatio: false,
+                    plugins: { legend: { position: 'right', labels: { boxWidth: 12, font: { size: 10 } } } }
+                }
+            });
+        }
+		
+		function parseDateTimeToTimestamp(dateStr, timeStr) {
+			if (!dateStr) return 0;
+			let hours = 0, minutes = 0;
+			if (timeStr) {
+				const upper = timeStr.trim().toUpperCase();
+				const parts = upper.split(' ');
+				const timeParts = parts[0].split(':');
+				hours = parseInt(timeParts[0]) || 0;
+				minutes = parseInt(timeParts[1]) || 0;
+				
+				if (parts[1] === 'PM' && hours < 12) hours += 12;
+				if (parts[1] === 'AM' && hours === 12) hours = 0;
+			}
+			const [y, m, d] = dateStr.split('-').map(Number);
+			return new Date(y, (m || 1) - 1, d || 1, hours, minutes).getTime();
+		}
+
+        function updateChart(counts) {
+            if (!categoryChartObj) return;
+            categoryChartObj.data.labels = Object.keys(counts);
+            categoryChartObj.data.datasets[0].data = Object.values(counts);
+            categoryChartObj.update();
+        }
+
+		async function handleSaveAndAddAnother(e) {
+			e.preventDefault();
+			
+			// Grab current customer info before we reset
+			const name = document.getElementById('custName').value;
+			const mobile = document.getElementById('custMobile').value;
+
+			// Trigger your standard submit logic
+			const formEvent = { preventDefault: () => {} };
+			await handleServiceSubmit(formEvent);
+
+			// After saving, re-open modal and instantly restore customer details for the next service
+			openServiceModal(); 
+			document.getElementById('custName').value = name;
+			document.getElementById('custMobile').value = mobile;
+			
+			// Clear out service-specific fields for the next entry
+			document.getElementById('serviceName').value = '';
+			document.getElementById('refId').value = '';
+			document.getElementById('govtFee').value = '';
+			document.getElementById('serviceCharge').value = '';
+			document.getElementById('totalFee').value = '';
+		}
+        function exportToCustomExcel() {
+            const servicesToExport = window.filteredServices && window.filteredServices.length > 0 
+                ? window.filteredServices 
+                : (window.getAllServices ? window.getAllServices() : []);
+
+            const allExpenses = window.getAllExpenses ? window.getAllExpenses() : [];
+
+            if (servicesToExport.length === 0 && allExpenses.length === 0) {
+                alert("No records found in the current view to export.");
+                return;
+            }
+
+            const dateStr = new Date().toISOString().split('T')[0];
+
+            let sumCashSC = 0;
+            let sumGpaySC = 0;
+            let sumBillCash = 0;
+            let sumBillGpay = 0;
+            let sumExpenses = 0;
+            let sumPending = 0;
+
+            let rowsHtml = '';
+            let srNo = 1;
+
+            servicesToExport.forEach((item, index) => {
+                const sc = parseFloat(item.serviceCharge) || 0;
+                const govt = parseFloat(item.govtFee) || 0;
+                const total = parseFloat(item.totalFee) || (sc + govt);
+                const status = item.paymentStatus || '';
+
+                let cashSC = 0;
+                let gpaySC = 0;
+                let billCash = 0;
+                let billGpay = 0;
+                let pendingAmt = 0;
+
+                if (status === 'Paid (Cash)') {
+                    cashSC = sc;
+                    billCash = govt;
+                } else if (status === 'Paid (UPI)') {
+                    gpaySC = sc;
+                    billGpay = govt;
+                } else if (status === 'Split (Cash & UPI)') {
+					const cashTotalPaid = parseFloat(item.cashAmount) || 0;
+					const upiTotalPaid = parseFloat(item.upiAmount) || 0;
+					const sc = parseFloat(item.serviceCharge) || 0;
+
+					// Priority Rule: Settle Service Charge from Cash first
+					if (cashTotalPaid >= sc) {
+						cashSC = sc;                   // Service charge sits fully in Cash
+						gpaySC = 0;
+						billCash = cashTotalPaid - sc; // Remaining cash goes to Govt Fee
+						billGpay = upiTotalPaid;       // All GPay goes to Govt Fee
+					} 
+					else if (cashTotalPaid > 0) {
+						// If cash is less than service charge, use all cash for SC, rest from UPI for SC
+						cashSC = cashTotalPaid;
+						gpaySC = sc - cashTotalPaid;
+						billCash = 0;
+						billGpay = upiTotalPaid - gpaySC;
+					} 
+					else {
+						// Fallback if 0 cash was given
+						cashSC = 0;
+						gpaySC = sc;
+						billCash = 0;
+						billGpay = upiTotalPaid - sc;
+					}
+				} else if (status.includes('Unpaid')) {
+                    pendingAmt = total;
+                }
+				else if (status === 'Partial') {
+					const paidSoFar = (parseFloat(item.cashAmount) || 0) + (parseFloat(item.upiAmount) || 0);
+					const sc = parseFloat(item.serviceCharge) || 0;
+					
+					// Attribute what they paid to cash/upi, and the rest to pending
+					cashSC = Math.min(paidSoFar, sc);
+					gpaySC = 0; 
+					pendingAmt = Math.max(0, total - paidSoFar);
+				}
+
+                sumCashSC += cashSC;
+                sumGpaySC += gpaySC;
+                sumBillCash += billCash;
+                sumBillGpay += billGpay;
+                sumPending += pendingAmt;
+
+                const rowBg = index % 2 === 0 ? '#ffffff' : '#f8fafc';
+
+                rowsHtml += `
+                    <tr style="background-color: ${rowBg};">
+                        <td style="border: 1px solid #cbd5e1; padding: 6px; text-align: center;">${srNo++}</td>
+                        <td style="border: 1px solid #cbd5e1; padding: 6px; text-align: left;">${item.serviceName || item.serviceCategory || 'Service'} (${item.custName || 'Walk-in'})</td>
+                        <td style="border: 1px solid #cbd5e1; padding: 6px; text-align: right;">${(Math.round(cashSC * 100) / 100).toFixed(2)}</td>
+                        <td style="border: 1px solid #cbd5e1; padding: 6px; text-align: right;">${(Math.round(gpaySC * 100) / 100).toFixed(2)}</td>
+                        <td style="border: 1px solid #cbd5e1; padding: 6px; text-align: right;">${(Math.round(billCash * 100) / 100).toFixed(2)}</td>
+                        <td style="border: 1px solid #cbd5e1; padding: 6px; text-align: right;">${(Math.round(billGpay * 100) / 100).toFixed(2)}</td>
+                        <td style="border: 1px solid #cbd5e1; padding: 6px; text-align: right;">0.00</td>
+                        <td style="border: 1px solid #cbd5e1; padding: 6px; text-align: right;">${(Math.round(pendingAmt * 100) / 100).toFixed(2)}</td>
+                        <td style="border: 1px solid #cbd5e1; padding: 6px; text-align: left;">[Date: ${extractStandardDate(item)}] [Status: ${status}] ${item.remarks || ''}</td>
+                    </tr>
+                `;
+            });
+
+            allExpenses.forEach(exp => {
+                const expDateISO = exp.expDate || (exp.timestamp ? exp.timestamp.split('T')[0] : '');
+                if (!expDateISO || isDateInSelectedRange({ entryDate: expDateISO })) {
+                    const expAmt = parseFloat(exp.amount) || 0;
+                    sumExpenses += expAmt;
+
+                    rowsHtml += `
+                        <tr style="background-color: #fff1f2;">
+                            <td style="border: 1px solid #cbd5e1; padding: 6px; text-align: center;">${srNo++}</td>
+                            <td style="border: 1px solid #cbd5e1; padding: 6px; text-align: left; color: #9f1239; font-weight: bold;">EXPENSE: ${exp.title || exp.category || 'Shop Expense'}</td>
+                            <td style="border: 1px solid #cbd5e1; padding: 6px; text-align: right;">0.00</td>
+                            <td style="border: 1px solid #cbd5e1; padding: 6px; text-align: right;">0.00</td>
+                            <td style="border: 1px solid #cbd5e1; padding: 6px; text-align: right;">0.00</td>
+                            <td style="border: 1px solid #cbd5e1; padding: 6px; text-align: right;">0.00</td>
+                            <td style="border: 1px solid #cbd5e1; padding: 6px; text-align: right; color: #9f1239; font-weight: bold;">${expAmt.toFixed(2)}</td>
+                            <td style="border: 1px solid #cbd5e1; padding: 6px; text-align: right;">0.00</td>
+                            <td style="border: 1px solid #cbd5e1; padding: 6px; text-align: left;">[Date: ${exp.expDate || ''}] ${exp.remarks || ''}</td>
+                        </tr>
+                    `;
+                }
+            });
+
+            const totalIncome = sumCashSC + sumGpaySC;
+
+            // Find the grandTotalHtml section inside exportToCustomExcel() and update the remarks text:
+			const grandTotalHtml = `
+				<tr style="background-color: #e0e7ff; font-weight: bold;">
+					<td style="border: 2px solid #312e81; padding: 8px; text-align: center;">TOTAL</td>
+					<td style="border: 2px solid #312e81; padding: 8px; text-align: left;">GRAND TOTALS (Current View)</td>
+					<td style="border: 2px solid #312e81; padding: 8px; text-align: right;">${sumCashSC.toFixed(2)}</td>
+					<td style="border: 2px solid #312e81; padding: 8px; text-align: right;">${sumGpaySC.toFixed(2)}</td>
+					<td style="border: 2px solid #312e81; padding: 8px; text-align: right;">${sumBillCash.toFixed(2)}</td>
+					<td style="border: 2px solid #312e81; padding: 8px; text-align: right;">${sumBillGpay.toFixed(2)}</td>
+					<td style="border: 2px solid #312e81; padding: 8px; text-align: right; color: #9f1239;">${sumExpenses.toFixed(2)}</td>
+					<td style="border: 2px solid #312e81; padding: 8px; text-align: right;">${sumPending.toFixed(2)}</td>
+					<!-- Updated label to Service Revenue -->
+					<td style="border: 2px solid #312e81; padding: 8px; text-align: left;">Total Service Revenue: ₹${(sumCashSC + sumGpaySC).toFixed(2)} | Total Expenses: ₹${sumExpenses.toFixed(2)}</td>
+				</tr>
+			`;
+
+            const excelHtml = `
+                <html xmlns:o="urn:schemas-microsoft-com:office:office" xmlns:x="urn:schemas-microsoft-com:office:excel" xmlns="http://www.w3.org/1999/xlink">
+                <head>
+                    <meta charset="UTF-8">
+                    <style>
+                        table { border-collapse: collapse; font-family: Calibri, sans-serif; font-size: 11pt; width: 100%; }
+                        th { background-color: #4f46e5; color: #ffffff; font-weight: bold; border: 1px solid #312e81; padding: 10px; text-align: center; }
+                        td { border: 1px solid #cbd5e1; padding: 6px; }
+                    </style>
+                </head>
+                <body>
+                    <table>
+                        <thead>
+                            <tr>
+                                <th>Sr No</th>
+                                <th>Service</th>
+                                <th>Cash</th>
+                                <th>Gpay</th>
+                                <th>Bill Amt Cash</th>
+                                <th>Bill Amt GPay</th>
+                                <th>Expenses</th>
+                                <th>Pending</th>
+                                <th>Remarks</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            ${rowsHtml}
+                            ${grandTotalHtml}
+                        </tbody>
+                    </table>
+                </body>
+                </html>
+            `;
+
+            const blob = new Blob(['\ufeff' + excelHtml], { type: 'application/vnd.ms-excel' });
+            const url = URL.createObjectURL(blob);
+            const a = document.createElement('a');
+            a.href = url;
+            a.download = `CSC_Income_Report_${dateStr}.xls`;
+            document.body.appendChild(a);
+            a.click();
+            document.body.removeChild(a);
+            URL.revokeObjectURL(url);
+        }
+		
+		// Robust CSV line parser that handles commas inside quotes correctly
+		function parseCSVLine(text) {
+			const result = [];
+			let insideQuote = false;
+			let currentField = '';
+			
+			for (let i = 0; i < text.length; i++) {
+				const char = text[i];
+				if (char === '"') {
+					insideQuote = !insideQuote;
+				} else if (char === ',' && !insideQuote) {
+					result.push(currentField.trim());
+					currentField = '';
+				} else {
+					currentField += char;
+				}
+			}
+			result.push(currentField.trim());
+			return result.map(val => val.replace(/^"|"$/g, '').trim());
+		}
+
+		async function handleCSVImport(event) {
+			const file = event.target.files[0];
+			if (!file) return;
+
+			const reader = new FileReader();
+			reader.onload = async function(e) {
+				const text = e.target.result;
+				const lines = text.split(/\r?\n/).filter(line => line.trim() !== '');
+				
+				if (lines.length < 2) {
+					alert("The CSV file appears empty or invalid.");
+					event.target.value = '';
+					return;
+				}
+
+				let importedCount = 0;
+				const now = new Date().toISOString();
+
+				// Loop starting from index 1 (skipping header row 0)
+				for (let i = 1; i < lines.length; i++) {
+					const cols = parseCSVLine(lines[i]);
+					if (cols.length < 2 || !cols[1]) continue; // Skip empty or invalid rows
+
+					// Expected Column Mapping:
+					// 0: Date | 1: Customer Name | 2: Mobile | 3: Category | 4: Service Name 
+					// 5: Ref ID | 6: Total Fee | 7: Service Charge | 8: Payment Status 
+					// 9: App Status | 10: Cash Amount | 11: UPI Amount | 12: Remarks
+
+					const record = {
+						entryDate: cols[0] || new Date().toISOString().split('T')[0],
+						custName: cols[1] || 'Unknown',
+						custMobile: cols[2] || '',
+						serviceCategory: cols[3] || 'Others',
+						serviceName: cols[4] || 'General Service',
+						refId: cols[5] || '',
+						totalFee: parseFloat(cols[6]) || 0,
+						serviceCharge: parseFloat(cols[7]) || 0,
+						paymentStatus: cols[8] || 'Paid (Cash)',
+						appStatus: cols[9] || 'Delivered',
+						cashAmount: parseFloat(cols[10]) || 0,
+						upiAmount: parseFloat(cols[11]) || 0,
+						remarks: cols[12] || 'Imported from CSV',
+						createdTimestamp: now,
+						updatedTimestamp: now,
+						loggedBy: typeof currentRole !== 'undefined' ? currentRole : 'Admin',
+						activityLogs: [{
+							timestamp: now,
+							text: `Record imported from CSV`,
+							type: 'import'
+						}]
+					};
+
+					// Save using your application's existing database function
+					if (typeof window.saveServiceEntry === 'function') {
+						try {
+							await window.saveServiceEntry(record);
+							importedCount++;
+						} catch (err) {
+							console.error("Error saving row " + i + ":", err);
+						}
+					}
+				}
+
+				alert(`Successfully imported ${importedCount} old records!`);
+				event.target.value = ''; // Reset file input so the same file can be chosen again if needed
+				
+				// Refresh your UI or data tables if function exists
+				if (typeof renderUI === 'function') renderUI();
+				else if (typeof loadServices === 'function') loadServices();
+			};
+
+			reader.readAsText(file);
+		}
+		
+		function initAttendanceModule() {
+			const today = new Date().toISOString().split('T')[0];
+			const dateInput = document.getElementById('attendanceDateFilter');
+			const monthInput = document.getElementById('salaryMonthFilter');
+			if (dateInput && !dateInput.value) dateInput.value = today;
+			if (monthInput && !monthInput.value) monthInput.value = today.substring(0, 7);
+
+			loadAttendanceForDate();
+			renderMonthlySalarySummary();
+			renderAllAttendanceHistory(); // Added here
+		}
+		// Toggle Daily Log visibility
+		function toggleDailyLogSection() {
+			const section = document.getElementById('dailyAttendanceSection');
+			const btnText = document.getElementById('dailyLogBtnText');
+			if (section.classList.contains('hidden')) {
+				section.classList.remove('hidden');
+				btnText.innerText = "Hide Daily Log Entry";
+				loadAttendanceForDate();
+			} else {
+				section.classList.add('hidden');
+				btnText.innerText = "Open Daily Log Entry";
+			}
+		}
+		// Core Attendance & Rule Evaluation Engine
+		// Updated evaluation engine factoring in personal outing duration
+		function evaluateAttendanceRules(checkIn, checkOut, breakMinutes, personalOut, personalIn, approvedOT) {
+			const standardStart = "09:30";
+			const standardEnd = "18:00"; // 6:00 PM
+			const otStartTime = "19:00"; // 7:00 PM
+			
+			let status = "P";
+			let lateMinutes = 0;
+			let reviewFlags = [];
+			
+			// Calculate personal outing duration in minutes if specified
+			let personalMins = 0;
+			if (personalOut && personalIn && personalIn > personalOut) {
+				personalMins = timeToMinutes(personalIn) - timeToMinutes(personalOut);
+				reviewFlags.push(`Personal outing: ${personalOut} to ${personalIn} (${personalMins}m)`);
+			}
+
+			const totalBreakMinutes = breakMinutes + personalMins;
+
+			// 1. Late Calculation & Status Rules
+			if (checkIn > standardStart) {
+				lateMinutes = timeToMinutes(checkIn) - timeToMinutes(standardStart);
+				
+				if (checkIn > "11:00") {
+					status = "H";
+					reviewFlags.push("Arrival after 11:00 AM (Half Day)");
+				} else if (checkIn > "10:30") {
+					status = "H";
+					reviewFlags.push("Arrival after 10:30 AM (Half Day)");
+				} else {
+					// Arrival between 9:30 and 10:30 is Present (P) with late minutes logged
+					status = "P";
+				}
+			}
+			
+			// 2. Break Duration Rules
+			if (totalBreakMinutes > 90) {
+				status = "H";
+				reviewFlags.push("Total break/outing > 90 mins (Half-Day review)");
+			} else if (totalBreakMinutes > 60) {
+				reviewFlags.push("Total break/outing > 60 mins (Flagged for review)");
+			}
+			
+			// 3. Early Leaving Check (Standard end is 6:00 PM / 18:00)
+			if (checkOut && checkOut < standardEnd) {
+				reviewFlags.push("Left early before 6:00 PM");
+			}
+			
+			// 4. Overtime Calculation (Starts strictly after 7:00 PM when Approved OT = 'Y')
+			let extraHours = 0;
+			if (approvedOT === 'Y' && checkOut && checkOut > otStartTime) {
+				const extraMinutes = timeToMinutes(checkOut) - timeToMinutes(otStartTime);
+				extraHours = extraMinutes / 60;
+			}
+			
+			return { status, lateMinutes, extraHours, reviewFlags };
+		}
+
+		function timeToMinutes(timeStr) {
+			if (!timeStr) return 0;
+			const [h, m] = timeStr.split(':').map(Number);
+			return h * 60 + m;
+		}
+
+		function openAddStaffModal() {
+			document.getElementById('staffModal')?.classList.remove('hidden');
+		}
+
+		function closeAddStaffModal() {
+			document.getElementById('staffModal')?.classList.add('hidden');
+			document.getElementById('staffForm')?.reset();
+		}
+
+		async function handleSaveStaff(event) {
+            event.preventDefault();
+            const staff = {
+                name: document.getElementById('staffNameInput').value,
+                mobile: document.getElementById('staffMobileInput').value,
+                baseSalary: parseFloat(document.getElementById('staffSalaryInput').value) || 0
+            };
+            
+            try {
+                if (typeof window.saveStaffMember === 'function') {
+                    await window.saveStaffMember(staff);
+                }
+                alert("Staff added successfully to cloud!");
+                closeAddStaffModal();
+                initAttendanceModule();
+            } catch (err) {
+                alert("Error saving staff: " + err.message);
+            }
+        }
+
+        function loadAttendanceForDate() {
+            const dateVal = document.getElementById('attendanceDateFilter').value;
+            const dateLabel = document.getElementById('currentAttendanceDateLabel');
+            if (dateLabel) dateLabel.innerText = dateVal;
+            
+            const staffList = window.getAllStaff ? window.getAllStaff() : [];
+            const attendanceRecords = window.getAllAttendance ? window.getAllAttendance() : {};
+            
+            const tbody = document.getElementById('attendanceTableBody');
+            if (!tbody) return;
+            tbody.innerHTML = '';
+
+            if (staffList.length === 0) {
+                tbody.innerHTML = `<tr><td colspan="8" class="p-6 text-center text-slate-400 italic">No staff members found in cloud. Click "Add Staff" above.</td></tr>`;
+                return;
+            }
+            
+            staffList.forEach(staff => {
+                const key = `${staff.id}_${dateVal}`;
+                const record = attendanceRecords[key] || { checkIn: "09:30", checkOut: "18:30", breakMinutes: 30, personalOut: "", personalIn: "", approvedOT: "N", status: "P", reviewFlags: [] };
+                
+                tbody.innerHTML += `
+                    <tr class="hover:bg-slate-50">
+                        <td class="p-3 font-medium">${staff.name}</td>
+                        <td class="p-3 space-y-1">
+                            <div class="flex items-center gap-1 text-xs"><span>In:</span><input type="time" value="${record.checkIn}" id="in_${staff.id}" class="border rounded px-1.5 py-0.5" onchange="updateAttendanceRow('${staff.id}')"></div>
+                            <div class="flex items-center gap-1 text-xs"><span>Out:</span><input type="time" value="${record.checkOut}" id="out_${staff.id}" class="border rounded px-1.5 py-0.5" onchange="updateAttendanceRow('${staff.id}')"></div>
+                        </td>
+                        <td class="p-3"><input type="number" value="${record.breakMinutes}" id="break_${staff.id}" class="border rounded px-2 py-1 w-16 text-xs" onchange="updateAttendanceRow('${staff.id}')"></td>
+                        <td class="p-3 space-y-1 text-xs">
+                            <div class="flex items-center gap-1"><span>Out:</span><input type="time" value="${record.personalOut || ''}" id="pout_${staff.id}" class="border rounded px-1 py-0.5" onchange="updateAttendanceRow('${staff.id}')"></div>
+                            <div class="flex items-center gap-1"><span>In:</span><input type="time" value="${record.personalIn || ''}" id="pin_${staff.id}" class="border rounded px-1 py-0.5" onchange="updateAttendanceRow('${staff.id}')"></div>
+                        </td>
+                        <td class="p-3">
+                            <select id="ot_${staff.id}" class="border rounded px-2 py-1 text-xs" onchange="updateAttendanceRow('${staff.id}')">
+                                <option value="N" ${record.approvedOT === 'N' ? 'selected' : ''}>No</option>
+                                <option value="Y" ${record.approvedOT === 'Y' ? 'selected' : ''}>Yes</option>
+                            </select>
+                        </td>
+                        <td class="p-3 font-bold" id="status_${staff.id}">${record.status}</td>
+                        <td class="p-3 text-xs text-amber-600 max-w-xs" id="flags_${staff.id}">${record.reviewFlags?.join(', ') || 'None'}</td>
+                        <td class="p-3 text-right"><button onclick="saveAttendanceRow('${staff.id}')" class="text-xs bg-indigo-600 hover:bg-indigo-700 text-white px-3 py-1.5 rounded font-medium">Save</button></td>
+                    </tr>
+                `;
+            });
+        }
+
+        async function saveAttendanceRow(staffId) {
+            const dateVal = document.getElementById('attendanceDateFilter').value;
+            const checkIn = document.getElementById(`in_${staffId}`).value;
+            const checkOut = document.getElementById(`out_${staffId}`).value;
+            const breakMinutes = parseInt(document.getElementById(`break_${staffId}`).value) || 0;
+            const personalOut = document.getElementById(`pout_${staffId}`).value;
+            const personalIn = document.getElementById(`pin_${staffId}`).value;
+            const approvedOT = document.getElementById(`ot_${staffId}`).value;
+            
+            const evaluation = evaluateAttendanceRules(checkIn, checkOut, breakMinutes, personalOut, personalIn, approvedOT);
+            
+            const recordData = {
+                staffId,
+                dateVal,
+                checkIn, checkOut, breakMinutes, personalOut, personalIn, approvedOT,
+                status: evaluation.status,
+                lateMinutes: evaluation.lateMinutes,
+                extraHours: evaluation.extraHours,
+                reviewFlags: evaluation.reviewFlags
+            };
+            
+            try {
+                if (typeof window.saveAttendanceRecord === 'function') {
+                    await window.saveAttendanceRecord(staffId, dateVal, recordData);
+                    alert("Attendance saved to cloud successfully!");
+                }
+            } catch (err) {
+                alert("Error saving attendance: " + err.message);
+            }
+        }
+
+        function renderMonthlySalarySummary() {
+			const monthVal = document.getElementById('salaryMonthFilter').value;
+			const staffList = window.getAllStaff ? window.getAllStaff() : [];
+			const attendanceRecords = window.getAllAttendance ? window.getAllAttendance() : {};
+			
+			const tbody = document.getElementById('salarySummaryTableBody');
+			if (!tbody) return;
+			tbody.innerHTML = '';
+
+			if (staffList.length === 0) {
+				tbody.innerHTML = `<tr><td colspan="7" class="p-6 text-center text-slate-400 italic">No staff members found.</td></tr>`;
+				return;
+			}
+
+			staffList.forEach(staff => {
+				let presentDays = 0;
+				let halfDays = 0;
+				let absentDays = 0;
+				let leaveDays = 0;
+				let totalLateMinutes = 0;
+				let totalApprovedExtraHours = 0;
+
+				Object.keys(attendanceRecords).forEach(key => {
+					if (key.startsWith(staff.id) && key.includes(monthVal)) {
+						const rec = attendanceRecords[key];
+						
+						if (rec.status === 'P') presentDays += 1;
+						else if (rec.status === 'H') halfDays += 1;
+						else if (rec.status === 'A') absentDays += 1;
+						else if (rec.status === 'L') leaveDays += 1;
+
+						totalLateMinutes += (rec.lateMinutes || 0);
+						totalApprovedExtraHours += (rec.extraHours || 0);
+					}
+				});
+
+				// Daily wage entered in baseSalary (e.g., ₹300)
+				const dailyWage = staff.baseSalary;
+
+				// Effective Present Units (Full Present = 1, Half Day = 0.5)
+				const effectivePresentUnits = presentDays + (halfDays * 0.5);
+
+				// Net Late Hours = Total Late Hours minus Approved Extra Hours
+				const totalLateHours = totalLateMinutes / 60;
+				let netLateHours = Math.max(0, totalLateHours - totalApprovedExtraHours);
+
+				// Every additional 2 hours of Net Late gives a 0.5-day Half-Day Deduction
+				let latePenaltyHalfDays = Math.floor(netLateHours / 2) * 0.5;
+
+				// Total Payable Units = Effective Present Units minus Late Penalties
+				const totalPayableUnits = Math.max(0, effectivePresentUnits - latePenaltyHalfDays);
+
+				// Final Payable = Total Payable Units * Daily Wage
+				const finalPayable = totalPayableUnits * dailyWage;
+
+				// Deduction Amount
+				const grossEarnings = effectivePresentUnits * dailyWage;
+				const deductionAmount = grossEarnings - finalPayable;
+
+				tbody.innerHTML += `
+					<tr class="hover:bg-slate-50 border-b border-slate-100">
+						<td class="p-3 font-medium text-slate-800">${staff.name}</td>
+						<td class="p-3 font-mono">₹${dailyWage.toLocaleString('en-IN')}</td>
+						<td class="p-3 text-center text-emerald-700 font-semibold">${presentDays} <span class="text-xs text-slate-400">(${effectivePresentUnits} units)</span></td>
+						<td class="p-3 text-center text-amber-700">${halfDays}</td>
+						<td class="p-3 text-center text-rose-600 font-semibold">${absentDays}</td>
+						<td class="p-3 text-right font-mono text-rose-600">₹${deductionAmount.toFixed(2)}</td>
+						<td class="p-3 text-right font-mono font-bold text-indigo-700">₹${finalPayable.toFixed(2)}</td>
+					</tr>
+				`;
+			});
+		}
+
+        function renderAllAttendanceHistory() {
+            const staffList = window.getAllStaff ? window.getAllStaff() : [];
+            const attendanceRecords = window.getAllAttendance ? window.getAllAttendance() : {};
+            const tbody = document.getElementById('allAttendanceHistoryBody');
+            if (!tbody) return;
+
+            tbody.innerHTML = '';
+            const keys = Object.keys(attendanceRecords);
+
+            if (keys.length === 0) {
+                tbody.innerHTML = `<tr><td colspan="7" class="p-6 text-center text-slate-400 italic">No attendance records found in cloud yet.</td></tr>`;
+                return;
+            }
+
+            const staffMap = {};
+            staffList.forEach(s => { staffMap[s.id] = s.name; });
+
+            keys.sort().reverse();
+
+            keys.forEach(key => {
+                const lastUnderscore = key.lastIndexOf('_');
+                const staffId = key.substring(0, lastUnderscore);
+                const dateVal = key.substring(lastUnderscore + 1);
+                const record = attendanceRecords[key];
+                const staffName = staffMap[staffId] || 'Unknown Staff';
+
+                let statusBadge = `<span class="px-2 py-0.5 text-xs rounded bg-emerald-100 text-emerald-700 font-bold">${record.status}</span>`;
+                if (record.status === 'H') statusBadge = `<span class="px-2 py-0.5 text-xs rounded bg-amber-100 text-amber-700 font-bold">Half-Day</span>`;
+                if (record.status === 'A') statusBadge = `<span class="px-2 py-0.5 text-xs rounded bg-rose-100 text-rose-700 font-bold">Absent</span>`;
+
+                let personalDisplay = record.personalOut ? `${record.personalOut} - ${record.personalIn || '?'}` : 'None';
+
+                tbody.innerHTML += `
+                    <tr class="hover:bg-slate-50">
+                        <td class="p-3 font-medium text-slate-800">${dateVal}</td>
+                        <td class="p-3 font-semibold">${staffName}</td>
+                        <td class="p-3 text-slate-600 font-mono text-xs">In: ${record.checkIn}<br>Out: ${record.checkOut}</td>
+                        <td class="p-3 text-xs font-mono text-indigo-600">${personalDisplay}</td>
+                        <td class="p-3">${statusBadge}</td>
+                        <td class="p-3 text-xs text-amber-600">${record.reviewFlags?.join(', ') || 'None'}</td>
+                        <td class="p-3 text-right space-x-2">
+                            <button onclick="editAttendanceRecord('${dateVal}')" class="text-xs bg-indigo-50 text-indigo-600 px-2.5 py-1 rounded font-medium hover:bg-indigo-100">Edit</button>
+                            <button onclick="deleteAttendanceRecord('${key}')" class="text-xs bg-rose-50 text-rose-600 px-2.5 py-1 rounded font-medium hover:bg-rose-100">Delete</button>
+                        </td>
+                    </tr>
+                `;
+            });
+        }
+
+        async function deleteAttendanceRecord(key) {
+            if (confirm("Are you sure you want to delete this cloud attendance record?")) {
+                try {
+                    if (typeof window.deleteAttendanceRecordDoc === 'function') {
+                        await window.deleteAttendanceRecordDoc(key);
+                    }
+                } catch (err) {
+                    alert("Error deleting: " + err.message);
+                }
+            }
+        }
+		
+		// Set today's date on load
+		document.addEventListener("DOMContentLoaded", () => {
+			const dateInput = document.getElementById('cashRegisterDate');
+			if (dateInput) {
+				const today = new Date().toISOString().split('T')[0];
+				dateInput.value = today;
+				loadDailyCashData();
+			}
+		});
+
+		
+
+		function renderDailyCashRegister() {
+			// Triggers recalculation if date view is active
+			calculateCashRegister();
+		}
+    </script>
+</body>
+</html>
