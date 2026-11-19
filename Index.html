@@ -19,10 +19,36 @@
             .print-only { display: block !important; }
             body { background: white; color: black; }
         }
+		
     </style>
 </head>
 <body class="bg-slate-100 min-h-screen flex flex-col text-slate-800">
+	<div id="authLoginOverlay" class="fixed inset-0 bg-slate-950/95 backdrop-blur-sm z-50 flex items-center justify-center p-4">
+		<div class="bg-slate-900 border border-slate-800 rounded-2xl max-w-sm w-full p-6 shadow-2xl space-y-4">
+			<div class="text-center">
+				<h2 class="text-lg font-bold text-white">CSC Counter Login</h2>
+				<p class="text-xs text-slate-400 mt-1">Sign in once to sync this device</p>
+			</div>
 
+			<form id="shopLoginForm" class="space-y-3">
+				<div>
+					<label class="block text-xs font-medium text-slate-300 mb-1">Shop Email</label>
+					<input type="email" id="loginEmail" required placeholder="shop@cscpayyanur.com"
+						class="w-full bg-slate-950 border border-slate-700 rounded-lg px-3 py-2 text-sm text-white focus:outline-none focus:border-emerald-500">
+				</div>
+				<div>
+					<label class="block text-xs font-medium text-slate-300 mb-1">Password</label>
+					<input type="password" id="loginPassword" required placeholder="••••••••"
+						class="w-full bg-slate-950 border border-slate-700 rounded-lg px-3 py-2 text-sm text-white focus:outline-none focus:border-emerald-500">
+				</div>
+				<p id="loginErrorMsg" class="text-xs text-rose-400 hidden"></p>
+				<button type="submit" id="loginSubmitBtn"
+					class="w-full bg-emerald-600 hover:bg-emerald-700 text-white font-semibold py-2 rounded-lg text-sm transition">
+					Unlock Counter App
+				</button>
+			</form>
+		</div>
+	</div>
     <!-- Header / Navbar -->
     <header class="bg-indigo-900 text-white shadow-md no-print">
         <div class="max-w-7xl mx-auto px-4 py-4 flex flex-col md:flex-row justify-between items-center gap-4">
@@ -843,529 +869,579 @@
 	<!-- Firebase SDK Setup -->
 
     <script type="module">
-        import { initializeApp } from "https://www.gstatic.com/firebasejs/11.0.0/firebase-app.js";
-        import { 
-            getFirestore, 
-            collection, 
-            addDoc, 
+		import { initializeApp } from "https://www.gstatic.com/firebasejs/11.0.0/firebase-app.js";
+		import { 
+			getFirestore, 
+			collection, 
+			addDoc, 
 			setDoc,
-            onSnapshot, 
-            doc, 
-            updateDoc, 
-            deleteDoc
-        } from "https://www.gstatic.com/firebasejs/11.0.0/firebase-firestore.js";
+			onSnapshot, 
+			doc, 
+			updateDoc, 
+			deleteDoc
+		} from "https://www.gstatic.com/firebasejs/11.0.0/firebase-firestore.js";
+		import { 
+			getAuth, 
+			signInWithEmailAndPassword, 
+			onAuthStateChanged, 
+			setPersistence, 
+			browserLocalPersistence 
+		} from "https://www.gstatic.com/firebasejs/11.0.0/firebase-auth.js";
 
-        const firebaseConfig = {
-          apiKey: "AIzaSyBm7lcrWOH3DwXPLXbYa7nTSzi5hIV9hUE",
-          authDomain: "csc-management-system.firebaseapp.com",
-          projectId: "csc-management-system",
-          storageBucket: "csc-management-system.firebasestorage.app",
-          messagingSenderId: "913341854315",
-          appId: "1:913341854315:web:5bb7fba8b1ca4aa7bbf72e"
-        };
+		const firebaseConfig = {
+		  apiKey: "AIzaSyBm7lcrWOH3DwXPLXbYa7nTSzi5hIV9hUE",
+		  authDomain: "csc-management-system.firebaseapp.com",
+		  projectId: "csc-management-system",
+		  storageBucket: "csc-management-system.firebasestorage.app",
+		  messagingSenderId: "913341854315",
+		  appId: "1:913341854315:web:5bb7fba8b1ca4aa7bbf72e"
+		};
 
-        const app = initializeApp(firebaseConfig);
-        const db = getFirestore(app);
-        const servicesCol = collection(db, "services");
-        const expensesCol = collection(db, "expenses");
+		const app = initializeApp(firebaseConfig);
+		const db = getFirestore(app);
+		const auth = getAuth(app);
+
+		// Keep user signed in across browser restarts on PC, laptop, and mobile
+		setPersistence(auth, browserLocalPersistence).catch((err) => {
+			console.error("Persistence error:", err);
+		});
+
+		const servicesCol = collection(db, "services");
+		const expensesCol = collection(db, "expenses");
 		const staffCol = collection(db, "staff");
-        const attendanceCol = collection(db, "attendance");
+		const attendanceCol = collection(db, "attendance");
+		const dailyCashCol = collection(db, "daily_cash");
+		const ratesCol = collection(db, "service_rates");
 
-        let allServices = [];
-        let allExpenses = [];
+		let allServices = [];
+		let allExpenses = [];
 		let allStaff = [];
-        let allAttendance = {};
-		
-        const syncDot = document.getElementById('syncDot');
-        const syncText = document.getElementById('syncText');
-		
+		let allAttendance = {};
+		let allDailyCash = [];
+		let masterServiceRates = [];
+		let isAppInitialized = false;
+		let unsubscribers = [];
+
+		const syncDot = document.getElementById('syncDot');
+		const syncText = document.getElementById('syncText');
 		window.filteredServices = [];
 
-        function updateSyncStatus(isLive, message) {
-            if (isLive) {
-                syncDot.className = "w-2 h-2 rounded-full bg-emerald-400 mr-2";
-                syncText.innerText = message || "Live Cloud Synced";
-            } else {
-                syncDot.className = "w-2 h-2 rounded-full bg-amber-400 mr-2 animate-pulse";
-                syncText.innerText = message || "Connecting...";
-            }
-        }
+		function updateSyncStatus(isLive, message) {
+			if (!syncDot || !syncText) return;
+			if (isLive) {
+				syncDot.className = "w-2 h-2 rounded-full bg-emerald-400 mr-2";
+				syncText.innerText = message || "Live Cloud Synced";
+			} else {
+				syncDot.className = "w-2 h-2 rounded-full bg-amber-400 mr-2 animate-pulse";
+				syncText.innerText = message || "Connecting...";
+			}
+		}
 
-        // Live Cloud Sync for Services
-        onSnapshot(servicesCol, (snapshot) => {
-            allServices = [];
-            snapshot.forEach((docSnap) => {
-                allServices.push({ id: docSnap.id, ...docSnap.data() });
-            });
-            updateSyncStatus(true, "Live Cloud Synced");
-            window.renderUI();
-        }, (err) => {
-            console.error("Services Firestore error:", err);
-            updateSyncStatus(false, "Sync Error");
-        });
+		// Handle Login Form Submission
+		const loginForm = document.getElementById('shopLoginForm');
+		const loginOverlay = document.getElementById('authLoginOverlay');
+		const loginErrorMsg = document.getElementById('loginErrorMsg');
 
-        // Live Cloud Sync for Expenses
-       // Live Cloud Sync for Expenses
-        onSnapshot(expensesCol, (snapshot) => {
-            allExpenses = [];
-            snapshot.forEach((docSnap) => {
-                allExpenses.push({ id: docSnap.id, ...docSnap.data() });
-            });
-            
-            // This runs automatically as soon as Firebase downloads the data on load, add, edit, or delete
-            if (typeof filterAndRenderExpenses === 'function') {
-                filterAndRenderExpenses();
-            }
-            if (typeof window.renderUI === 'function') {
-                window.renderUI();
-            }
-        });
+		if (loginForm) {
+			loginForm.addEventListener('submit', async (e) => {
+				e.preventDefault();
+				const email = document.getElementById('loginEmail').value.trim();
+				const password = document.getElementById('loginPassword').value;
+				const btn = document.getElementById('loginSubmitBtn');
 
-		// Live Cloud Sync for Staff
-        onSnapshot(staffCol, (snapshot) => {
-            allStaff = [];
-            snapshot.forEach((docSnap) => {
-                allStaff.push({ id: docSnap.id, ...docSnap.data() });
-            });
-            if (typeof loadAttendanceForDate === 'function') loadAttendanceForDate();
-            if (typeof renderMonthlySalarySummary === 'function') renderMonthlySalarySummary();
-            if (typeof renderAllAttendanceHistory === 'function') renderAllAttendanceHistory();
-        });
+				if (btn) {
+					btn.disabled = true;
+					btn.innerText = "Signing in...";
+				}
+				if (loginErrorMsg) loginErrorMsg.classList.add('hidden');
 
-        // Live Cloud Sync for Attendance
-        onSnapshot(attendanceCol, (snapshot) => {
-            allAttendance = {};
-            snapshot.forEach((docSnap) => {
-                allAttendance[docSnap.id] = docSnap.data();
-            });
-            if (typeof loadAttendanceForDate === 'function') loadAttendanceForDate();
-            if (typeof renderMonthlySalarySummary === 'function') renderMonthlySalarySummary();
-            if (typeof renderAllAttendanceHistory === 'function') renderAllAttendanceHistory();
-        });
-		
+				try {
+					await signInWithEmailAndPassword(auth, email, password);
+				} catch (error) {
+					if (loginErrorMsg) {
+						loginErrorMsg.innerText = "Invalid email or password. Please try again.";
+						loginErrorMsg.classList.remove('hidden');
+					}
+					if (btn) {
+						btn.disabled = false;
+						btn.innerText = "Unlock Counter App";
+					}
+				}
+			});
+		}
+
+		function initializeFirestoreData() {
+			unsubscribers.forEach((unsub) => unsub && unsub());
+			unsubscribers = [];
+
+			// Live Cloud Sync for Services
+			unsubscribers.push(
+				onSnapshot(servicesCol, (snapshot) => {
+					allServices = [];
+					snapshot.forEach((docSnap) => {
+						allServices.push({ id: docSnap.id, ...docSnap.data() });
+					});
+					updateSyncStatus(true, "Live Cloud Synced");
+					if (typeof window.renderUI === 'function') window.renderUI();
+				}, (err) => {
+					console.error("Services Firestore error:", err);
+					updateSyncStatus(false, "Sync Error");
+				})
+			);
+
+			// Live Cloud Sync for Expenses
+			unsubscribers.push(
+				onSnapshot(expensesCol, (snapshot) => {
+					allExpenses = [];
+					snapshot.forEach((docSnap) => {
+						allExpenses.push({ id: docSnap.id, ...docSnap.data() });
+					});
+					if (typeof filterAndRenderExpenses === 'function') {
+						filterAndRenderExpenses();
+					}
+					if (typeof window.renderUI === 'function') {
+						window.renderUI();
+					}
+				})
+			);
+
+			// Live Cloud Sync for Staff
+			unsubscribers.push(
+				onSnapshot(staffCol, (snapshot) => {
+					allStaff = [];
+					snapshot.forEach((docSnap) => {
+						allStaff.push({ id: docSnap.id, ...docSnap.data() });
+					});
+					if (typeof loadAttendanceForDate === 'function') loadAttendanceForDate();
+					if (typeof renderMonthlySalarySummary === 'function') renderMonthlySalarySummary();
+					if (typeof renderAllAttendanceHistory === 'function') renderAllAttendanceHistory();
+				})
+			);
+
+			// Live Cloud Sync for Attendance
+			unsubscribers.push(
+				onSnapshot(attendanceCol, (snapshot) => {
+					allAttendance = {};
+					snapshot.forEach((docSnap) => {
+						allAttendance[docSnap.id] = docSnap.data();
+					});
+					if (typeof loadAttendanceForDate === 'function') loadAttendanceForDate();
+					if (typeof renderMonthlySalarySummary === 'function') renderMonthlySalarySummary();
+					if (typeof renderAllAttendanceHistory === 'function') renderAllAttendanceHistory();
+				})
+			);
+
+			// Live sync for Daily Cash Register
+			unsubscribers.push(
+				onSnapshot(dailyCashCol, (snapshot) => {
+					allDailyCash = [];
+					snapshot.forEach((docSnap) => {
+						allDailyCash.push({ id: docSnap.id, ...docSnap.data() });
+					});
+					if (typeof renderDailyCashRegister === 'function') renderDailyCashRegister();
+				})
+			);
+
+			// Live rate master changes from Firebase
+			unsubscribers.push(
+				onSnapshot(ratesCol, (snapshot) => {
+					masterServiceRates = [];
+					snapshot.forEach((docSnap) => {
+						masterServiceRates.push({ id: docSnap.id, ...docSnap.data() });
+					});
+					masterServiceRates.sort((a, b) => a.dept.localeCompare(b.dept) || a.name.localeCompare(b.name));
+					initQuickSelectDropdowns();
+				})
+			);
+		}
+
+		console.log("1. Module started");
+
+		onAuthStateChanged(auth, (user) => {
+			console.log("2. Auth state changed:", user ? user.email : "NOT LOGGED IN");
+			if (user) {
+				if (loginOverlay) loginOverlay.classList.add('hidden');
+				if (!isAppInitialized) {
+					isAppInitialized = true;
+					console.log("3. Starting Firestore listeners...");
+					initializeFirestoreData();
+				}
+			} else {
+				console.log("3. Showing login overlay. Overlay element:", loginOverlay);
+				if (loginOverlay) loginOverlay.classList.remove('hidden');
+			}
+		});
+
 		// Global Firebase Bindings for Staff & Attendance
-        window.getAllStaff = () => allStaff;
-        window.getAllAttendance = () => allAttendance;
+		window.getAllStaff = () => allStaff;
+		window.getAllAttendance = () => allAttendance;
 
-        window.saveStaffMember = async function(staffData) {
-            const newId = 'staff_' + Date.now();
-            const docRef = doc(db, "staff", newId);
-            await setDoc(docRef, staffData);
-        };
+		window.saveStaffMember = async function(staffData) {
+			const newId = 'staff_' + Date.now();
+			const docRef = doc(db, "staff", newId);
+			await setDoc(docRef, staffData);
+		};
 
-        window.deleteStaffMember = async function(id) {
-            await deleteDoc(doc(db, "staff", id));
-        };
+		window.deleteStaffMember = async function(id) {
+			await deleteDoc(doc(db, "staff", id));
+		};
 
-        window.saveAttendanceRecord = async function(staffId, dateVal, recordData) {
-            const docId = `${staffId}_${dateVal}`;
-            const docRef = doc(db, "attendance", docId);
-            await setDoc(docRef, recordData, { merge: true });
-        };
+		window.saveAttendanceRecord = async function(staffId, dateVal, recordData) {
+			const docId = `${staffId}_${dateVal}`;
+			const docRef = doc(db, "attendance", docId);
+			await setDoc(docRef, recordData, { merge: true });
+		};
 
-        window.deleteAttendanceRecordDoc = async function(docId) {
-            await deleteDoc(doc(db, "attendance", docId));
-        };
-		
-        // Global Firebase Bindings
-        window.saveServiceEntry = async function(data) {
-            if (data.id) {
-                const docRef = doc(db, "services", data.id);
-                delete data.id;
-                await updateDoc(docRef, data);
-            } else {
-                data.createdTimestamp = new Date().toISOString();
-                await addDoc(servicesCol, data);
-            }
-        };
+		window.deleteAttendanceRecordDoc = async function(docId) {
+			await deleteDoc(doc(db, "attendance", docId));
+		};
 
-        window.deleteServiceEntry = async function(id) {
-            if (confirm("Are you sure you want to delete this service record?")) {
-                await deleteDoc(doc(db, "services", id));
-            }
-        };
+		// Global Firebase Bindings for Services & Expenses
+		window.saveServiceEntry = async function(data) {
+			if (data.id) {
+				const docRef = doc(db, "services", data.id);
+				delete data.id;
+				await updateDoc(docRef, data);
+			} else {
+				data.createdTimestamp = new Date().toISOString();
+				await addDoc(servicesCol, data);
+			}
+		};
 
-        window.saveExpenseEntry = async function(data) {
-            if (data.id) {
-                const docRef = doc(db, "expenses", data.id);
-                delete data.id;
-                await updateDoc(docRef, data);
-            } else {
-                data.createdTimestamp = new Date().toISOString();
-                await addDoc(expensesCol, data);
-            }
-        };
+		window.deleteServiceEntry = async function(id) {
+			if (confirm("Are you sure you want to delete this service record?")) {
+				await deleteDoc(doc(db, "services", id));
+			}
+		};
 
-       window.deleteExpenseEntry = async function(id) {
-            if (confirm("Delete this expense log?")) {
-                await deleteDoc(doc(db, "expenses", id));
-                
-                // Refresh the expense table and update totals immediately
-                if (typeof filterAndRenderExpenses === 'function') {
-                    filterAndRenderExpenses();
-                }
-                if (typeof renderUI === 'function') {
-                    renderUI();
-                }
-            }
-        };
-        window.getAllServices = () => allServices;
-        window.getAllExpenses = () => patchLegacyExpenses(allExpenses);
+		window.saveExpenseEntry = async function(data) {
+			if (data.id) {
+				const docRef = doc(db, "expenses", data.id);
+				delete data.id;
+				await updateDoc(docRef, data);
+			} else {
+				data.createdTimestamp = new Date().toISOString();
+				await addDoc(expensesCol, data);
+			}
+		};
 
-        function patchLegacyExpenses(expensesArray) {
-            if (!Array.isArray(expensesArray)) return [];
-            return expensesArray.map((item, index) => {
-                if (!item.id) {
-                    item.id = 'exp_legacy_' + (item.date || 'nodate') + '_' + index + '_' + Math.random().toString(36).substring(2, 7);
-                }
-                return item;
-            });
-        }
-		
-		const dailyCashCol = collection(db, "daily_cash");
-        let allDailyCash = [];
+		window.deleteExpenseEntry = async function(id) {
+			if (confirm("Delete this expense log?")) {
+				await deleteDoc(doc(db, "expenses", id));
+				if (typeof filterAndRenderExpenses === 'function') {
+					filterAndRenderExpenses();
+				}
+				if (typeof window.renderUI === 'function') {
+					window.renderUI();
+				}
+			}
+		};
 
-        // Live sync for Daily Cash Register
-        onSnapshot(dailyCashCol, (snapshot) => {
-            allDailyCash = [];
-            snapshot.forEach((docSnap) => {
-                allDailyCash.push({ id: docSnap.id, ...docSnap.data() });
-            });
-            if (typeof renderDailyCashRegister === 'function') renderDailyCashRegister();
-        });
+		window.getAllServices = () => allServices;
+		window.getAllExpenses = () => patchLegacyExpenses(allExpenses);
 
-        window.getAllDailyCash = () => allDailyCash;
+		function patchLegacyExpenses(expensesArray) {
+			if (!Array.isArray(expensesArray)) return [];
+			return expensesArray.map((item, index) => {
+				if (!item.id) {
+					item.id = 'exp_legacy_' + (item.date || 'nodate') + '_' + index + '_' + Math.random().toString(36).substring(2, 7);
+				}
+				return item;
+			});
+		}
 
-        window.saveDailyCashRecord = async function(dateKey, recordData) {
-            const docRef = doc(db, "daily_cash", dateKey);
-            await setDoc(docRef, recordData, { merge: true });
-        };
-		
+		window.getAllDailyCash = () => allDailyCash;
+
+		window.saveDailyCashRecord = async function(dateKey, recordData) {
+			const docRef = doc(db, "daily_cash", dateKey);
+			await setDoc(docRef, recordData, { merge: true });
+		};
+
 		window.loadDailyCashData = function loadDailyCashData() {
-    const dateInput = document.getElementById('cashRegisterDate');
-    if (!dateInput || !dateInput.value) return;
-    const dateVal = dateInput.value;
+			const dateInput = document.getElementById('cashRegisterDate');
+			if (!dateInput || !dateInput.value) return;
+			const dateVal = dateInput.value;
 
-    const allRecords = window.getAllDailyCash ? window.getAllDailyCash() : [];
-    
-    const parts = dateVal.split('-');
-    const currDate = new Date(parts[0], parts[1] - 1, parts[2]);
-    currDate.setDate(currDate.getDate() - 1);
-    const prevDateStr = currDate.getFullYear() + '-' + 
-                        String(currDate.getMonth() + 1).padStart(2, '0') + '-' + 
-                        String(currDate.getDate()).padStart(2, '0');
-    
-    let prevOpening = 0;
-    const prevRecord = allRecords.find(r => r.id === prevDateStr);
-    if (prevRecord) {
-        prevOpening = prevRecord.finalClosingBalance || 0;
-    }
+			const allRecords = window.getAllDailyCash ? window.getAllDailyCash() : [];
+			
+			const parts = dateVal.split('-');
+			const currDate = new Date(parts[0], parts[1] - 1, parts[2]);
+			currDate.setDate(currDate.getDate() - 1);
+			const prevDateStr = currDate.getFullYear() + '-' + 
+								String(currDate.getMonth() + 1).padStart(2, '0') + '-' + 
+								String(currDate.getDate()).padStart(2, '0');
+			
+			let prevOpening = 0;
+			const prevRecord = allRecords.find(r => r.id === prevDateStr);
+			if (prevRecord) {
+				prevOpening = prevRecord.finalClosingBalance || 0;
+			}
 
-    let autoCashIncome = 0;
-    let autoGpayIncome = 0;
-    let autoExpenseTotal = 0;
+			let autoCashIncome = 0;
+			let autoGpayIncome = 0;
+			let autoExpenseTotal = 0;
 
-    const services = window.getAllServices();
-    services.forEach(s => {
-        const sDate = s.entryDate || s.date || s.serviceDate || (s.createdTimestamp ? s.createdTimestamp.split('T')[0] : '');
-        
-        if (sDate === dateVal) {
-            const cashPart = parseFloat(s.cashAmount || 0);
-            const upiPart = parseFloat(s.upiAmount || 0);
+			const services = window.getAllServices();
+			services.forEach(s => {
+				const sDate = s.entryDate || s.date || s.serviceDate || (s.createdTimestamp ? s.createdTimestamp.split('T')[0] : '');
+				if (sDate === dateVal) {
+					const cashPart = parseFloat(s.cashAmount || 0);
+					const upiPart = parseFloat(s.upiAmount || 0);
 
-            if (cashPart === 0 && upiPart === 0) {
-                const total = parseFloat(s.totalFee || s.amount || s.fee || 0);
-                const paymentInfo = String(s.paymentStatus || s.paymentMode || '').toUpperCase();
-                if (paymentInfo.includes('UPI') || paymentInfo.includes('GPAY') || paymentInfo.includes('ONLINE')) {
-                    autoGpayIncome += total;
-                } else {
-                    autoCashIncome += total;
-                }
-            } else {
-                autoCashIncome += cashPart;
-                autoGpayIncome += upiPart;
-            }
-        }
-    });
+					if (cashPart === 0 && upiPart === 0) {
+						const total = parseFloat(s.totalFee || s.amount || s.fee || 0);
+						const paymentInfo = String(s.paymentStatus || s.paymentMode || '').toUpperCase();
+						if (paymentInfo.includes('UPI') || paymentInfo.includes('GPAY') || paymentInfo.includes('ONLINE')) {
+							autoGpayIncome += total;
+						} else {
+							autoCashIncome += total;
+						}
+					} else {
+						autoCashIncome += cashPart;
+						autoGpayIncome += upiPart;
+					}
+				}
+			});
 
-    const expenses = window.getAllExpenses();
-    expenses.forEach(e => {
-        const eDate = e.entryDate || e.date || e.expenseDate || (e.createdTimestamp ? e.createdTimestamp.split('T')[0] : '');
-        if (eDate === dateVal) {
-            autoExpenseTotal += parseFloat(e.amount || e.expense || e.cost || 0);
-        }
-    });
+			const expenses = window.getAllExpenses();
+			expenses.forEach(e => {
+				const eDate = e.entryDate || e.date || e.expenseDate || (e.createdTimestamp ? e.createdTimestamp.split('T')[0] : '');
+				if (eDate === dateVal) {
+					autoExpenseTotal += parseFloat(e.amount || e.expense || e.cost || 0);
+				}
+			});
 
-    const currentRecord = allRecords.find(r => r.id === dateVal);
-    if (currentRecord) {
-        document.getElementById('cashOpeningBal').value = currentRecord.openingBalance !== undefined ? currentRecord.openingBalance : prevOpening;
-        document.getElementById('cashExtraAdded').value = currentRecord.extraAdded || 0;
-        document.getElementById('cashIncomeToday').value = currentRecord.cashIncome !== undefined ? currentRecord.cashIncome : autoCashIncome;
-        document.getElementById('gpayIncomeToday').value = currentRecord.gpayIncome !== undefined ? currentRecord.gpayIncome : autoGpayIncome;
-        document.getElementById('cashExpenseTotal').value = currentRecord.expenseTotal !== undefined ? currentRecord.expenseTotal : autoExpenseTotal;
-        document.getElementById('cashTakenOut').value = currentRecord.cashTaken || 0;
-        document.getElementById('actualCashInDrawer').value = currentRecord.actualCashInDrawer || 0;
-    } else {
-        document.getElementById('cashOpeningBal').value = prevOpening;
-        document.getElementById('cashExtraAdded').value = 0;
-        document.getElementById('cashIncomeToday').value = autoCashIncome;
-        document.getElementById('gpayIncomeToday').value = autoGpayIncome;
-        document.getElementById('cashExpenseTotal').value = autoExpenseTotal;
-        document.getElementById('cashTakenOut').value = 0;
-        document.getElementById('actualCashInDrawer').value = 0;
-    }
+			const currentRecord = allRecords.find(r => r.id === dateVal);
+			if (currentRecord) {
+				document.getElementById('cashOpeningBal').value = currentRecord.openingBalance !== undefined ? currentRecord.openingBalance : prevOpening;
+				document.getElementById('cashExtraAdded').value = currentRecord.extraAdded || 0;
+				document.getElementById('cashIncomeToday').value = currentRecord.cashIncome !== undefined ? currentRecord.cashIncome : autoCashIncome;
+				document.getElementById('gpayIncomeToday').value = currentRecord.gpayIncome !== undefined ? currentRecord.gpayIncome : autoGpayIncome;
+				document.getElementById('cashExpenseTotal').value = currentRecord.expenseTotal !== undefined ? currentRecord.expenseTotal : autoExpenseTotal;
+				document.getElementById('cashTakenOut').value = currentRecord.cashTaken || 0;
+				document.getElementById('actualCashInDrawer').value = currentRecord.actualCashInDrawer || 0;
+			} else {
+				document.getElementById('cashOpeningBal').value = prevOpening;
+				document.getElementById('cashExtraAdded').value = 0;
+				document.getElementById('cashIncomeToday').value = autoCashIncome;
+				document.getElementById('gpayIncomeToday').value = autoGpayIncome;
+				document.getElementById('cashExpenseTotal').value = autoExpenseTotal;
+				document.getElementById('cashTakenOut').value = 0;
+				document.getElementById('actualCashInDrawer').value = 0;
+			}
 
-    calculateCashRegister();
-}
+			calculateCashRegister();
+		};
 
-window.calculateCashRegister = function calculateCashRegister() {
-    const opening = parseFloat(document.getElementById('cashOpeningBal').value) || 0;
-    const extra = parseFloat(document.getElementById('cashExtraAdded').value) || 0;
-    const cashIncome = parseFloat(document.getElementById('cashIncomeToday').value) || 0;
-    const expense = parseFloat(document.getElementById('cashExpenseTotal').value) || 0;
-    const cashTaken = parseFloat(document.getElementById('cashTakenOut').value) || 0;
-    const actualCash = parseFloat(document.getElementById('actualCashInDrawer').value) || 0;
+		window.calculateCashRegister = function calculateCashRegister() {
+			const opening = parseFloat(document.getElementById('cashOpeningBal').value) || 0;
+			const extra = parseFloat(document.getElementById('cashExtraAdded').value) || 0;
+			const cashIncome = parseFloat(document.getElementById('cashIncomeToday').value) || 0;
+			const expense = parseFloat(document.getElementById('cashExpenseTotal').value) || 0;
+			const cashTaken = parseFloat(document.getElementById('cashTakenOut').value) || 0;
+			const actualCash = parseFloat(document.getElementById('actualCashInDrawer').value) || 0;
 
-    const totalInflow = opening + extra + cashIncome;
-    const expectedCash = totalInflow - expense; 
-    const difference = actualCash - expectedCash;
-    const finalClosing = actualCash - cashTaken;
+			const totalInflow = opening + extra + cashIncome;
+			const expectedCash = totalInflow - expense; 
+			const difference = actualCash - expectedCash;
+			const finalClosing = actualCash - cashTaken;
 
-    document.getElementById('displayTotalInflow').innerText = `₹${totalInflow.toLocaleString('en-IN')}`;
-    document.getElementById('displayExpectedCash').innerText = `₹${expectedCash.toLocaleString('en-IN')}`;
-    document.getElementById('displayActualCash').innerText = `₹${actualCash.toLocaleString('en-IN')}`;
-    document.getElementById('displayFinalClosing').innerText = `₹${finalClosing.toLocaleString('en-IN')}`;
+			document.getElementById('displayTotalInflow').innerText = `₹${totalInflow.toLocaleString('en-IN')}`;
+			document.getElementById('displayExpectedCash').innerText = `₹${expectedCash.toLocaleString('en-IN')}`;
+			document.getElementById('displayActualCash').innerText = `₹${actualCash.toLocaleString('en-IN')}`;
+			document.getElementById('displayFinalClosing').innerText = `₹${finalClosing.toLocaleString('en-IN')}`;
 
-    const diffEl = document.getElementById('displayDifference');
-    diffEl.innerText = `₹${difference.toLocaleString('en-IN')}`;
-    if (difference === 0) {
-        diffEl.className = "font-mono font-bold text-emerald-400";
-    } else if (difference > 0) {
-        diffEl.className = "font-mono font-bold text-amber-400";
-    } else {
-        diffEl.className = "font-mono font-bold text-rose-400";
-    }
-}
+			const diffEl = document.getElementById('displayDifference');
+			diffEl.innerText = `₹${difference.toLocaleString('en-IN')}`;
+			if (difference === 0) {
+				diffEl.className = "font-mono font-bold text-emerald-400";
+			} else if (difference > 0) {
+				diffEl.className = "font-mono font-bold text-amber-400";
+			} else {
+				diffEl.className = "font-mono font-bold text-rose-400";
+			}
+		};
 
-window.saveCurrentCashRegister = async function saveCurrentCashRegister() {
-    const dateInput = document.getElementById('cashRegisterDate');
-    if (!dateInput || !dateInput.value) {
-        alert("Please select a date.");
-        return;
-    }
-    const dateVal = dateInput.value;
+		window.saveCurrentCashRegister = async function saveCurrentCashRegister() {
+			const dateInput = document.getElementById('cashRegisterDate');
+			if (!dateInput || !dateInput.value) {
+				alert("Please select a date.");
+				return;
+			}
+			const dateVal = dateInput.value;
 
-    const actualCash = parseFloat(document.getElementById('actualCashInDrawer').value) || 0;
-    const cashTaken = parseFloat(document.getElementById('cashTakenOut').value) || 0;
+			const actualCash = parseFloat(document.getElementById('actualCashInDrawer').value) || 0;
+			const cashTaken = parseFloat(document.getElementById('cashTakenOut').value) || 0;
 
-    const recordData = {
-        date: dateVal,
-        openingBalance: parseFloat(document.getElementById('cashOpeningBal').value) || 0,
-        extraAdded: parseFloat(document.getElementById('cashExtraAdded').value) || 0,
-        cashIncome: parseFloat(document.getElementById('cashIncomeToday').value) || 0,
-        gpayIncome: parseFloat(document.getElementById('gpayIncomeToday').value) || 0,
-        expenseTotal: parseFloat(document.getElementById('cashExpenseTotal').value) || 0,
-        cashTaken: cashTaken,
-        actualCashInDrawer: actualCash,
-        difference: parseFloat(document.getElementById('displayDifference').innerText.replace(/[₹,]/g, '')) || 0,
-        finalClosingBalance: actualCash - cashTaken,
-        updatedAt: new Date().toISOString()
-    };
+			const recordData = {
+				date: dateVal,
+				openingBalance: parseFloat(document.getElementById('cashOpeningBal').value) || 0,
+				extraAdded: parseFloat(document.getElementById('cashExtraAdded').value) || 0,
+				cashIncome: parseFloat(document.getElementById('cashIncomeToday').value) || 0,
+				gpayIncome: parseFloat(document.getElementById('gpayIncomeToday').value) || 0,
+				expenseTotal: parseFloat(document.getElementById('cashExpenseTotal').value) || 0,
+				cashTaken: cashTaken,
+				actualCashInDrawer: actualCash,
+				difference: parseFloat(document.getElementById('displayDifference').innerText.replace(/[₹,]/g, '')) || 0,
+				finalClosingBalance: actualCash - cashTaken,
+				updatedAt: new Date().toISOString()
+			};
 
-    try {
-        // Uses standard 'doc' directly
-        const docRef = doc(db, "daily_cash", dateVal);
-        await setDoc(docRef, recordData, { merge: true });
-        alert(`Daily cash closing for ${dateVal} saved & locked successfully!`);
-    } catch (err) {
-        alert("Error saving record: " + err.message);
-    }
-}
-window.refreshDailyCashTotals = function() {
-    const dateInput = document.getElementById('cashRegisterDate');
-    if (!dateInput || !dateInput.value) {
-        alert("Please select a date first.");
-        return;
-    }
-    const dateVal = dateInput.value;
+			try {
+				const docRef = doc(db, "daily_cash", dateVal);
+				await setDoc(docRef, recordData, { merge: true });
+				alert(`Daily cash closing for ${dateVal} saved & locked successfully!`);
+			} catch (err) {
+				alert("Error saving record: " + err.message);
+			}
+		};
 
-    // Recalculate live totals from services and expenses
-    let autoCashIncome = 0;
-    let autoGpayIncome = 0;
-    let autoExpenseTotal = 0;
+		window.refreshDailyCashTotals = function() {
+			const dateInput = document.getElementById('cashRegisterDate');
+			if (!dateInput || !dateInput.value) {
+				alert("Please select a date first.");
+				return;
+			}
+			const dateVal = dateInput.value;
 
-    const services = window.getAllServices ? window.getAllServices() : [];
-    services.forEach(s => {
-        const sDate = s.entryDate || s.date || s.serviceDate || (s.createdTimestamp ? s.createdTimestamp.split('T')[0] : '');
-        if (sDate === dateVal) {
-            const cashPart = parseFloat(s.cashAmount || 0);
-            const upiPart = parseFloat(s.upiAmount || 0);
+			let autoCashIncome = 0;
+			let autoGpayIncome = 0;
+			let autoExpenseTotal = 0;
 
-            if (cashPart === 0 && upiPart === 0) {
-                const total = parseFloat(s.totalFee || s.amount || s.fee || 0);
-                const paymentInfo = String(s.paymentStatus || s.paymentMode || '').toUpperCase();
-                if (paymentInfo.includes('UPI') || paymentInfo.includes('GPAY') || paymentInfo.includes('ONLINE')) {
-                    autoGpayIncome += total;
-                } else {
-                    autoCashIncome += total;
-                }
-            } else {
-                autoCashIncome += cashPart;
-                autoGpayIncome += upiPart;
-            }
-        }
-    });
+			const services = window.getAllServices ? window.getAllServices() : [];
+			services.forEach(s => {
+				const sDate = s.entryDate || s.date || s.serviceDate || (s.createdTimestamp ? s.createdTimestamp.split('T')[0] : '');
+				if (sDate === dateVal) {
+					const cashPart = parseFloat(s.cashAmount || 0);
+					const upiPart = parseFloat(s.upiAmount || 0);
 
-    const expenses = window.getAllExpenses ? window.getAllExpenses() : [];
-    expenses.forEach(e => {
-        const eDate = e.entryDate || e.date || e.expenseDate || (e.createdTimestamp ? e.createdTimestamp.split('T')[0] : '');
-        if (eDate === dateVal) {
-            autoExpenseTotal += parseFloat(e.amount || e.expense || e.cost || 0);
-        }
-    });
+					if (cashPart === 0 && upiPart === 0) {
+						const total = parseFloat(s.totalFee || s.amount || s.fee || 0);
+						const paymentInfo = String(s.paymentStatus || s.paymentMode || '').toUpperCase();
+						if (paymentInfo.includes('UPI') || paymentInfo.includes('GPAY') || paymentInfo.includes('ONLINE')) {
+							autoGpayIncome += total;
+						} else {
+							autoCashIncome += total;
+						}
+					} else {
+						autoCashIncome += cashPart;
+						autoGpayIncome += upiPart;
+					}
+				}
+			});
 
-    // Update only the income and expense fields with the newly added data
-    document.getElementById('cashIncomeToday').value = autoCashIncome;
-    document.getElementById('gpayIncomeToday').value = autoGpayIncome;
-    document.getElementById('cashExpenseTotal').value = autoExpenseTotal;
+			const expenses = window.getAllExpenses ? window.getAllExpenses() : [];
+			expenses.forEach(e => {
+				const eDate = e.entryDate || e.date || e.expenseDate || (e.createdTimestamp ? e.createdTimestamp.split('T')[0] : '');
+				if (eDate === dateVal) {
+					autoExpenseTotal += parseFloat(e.amount || e.expense || e.cost || 0);
+				}
+			});
 
-    // Recalculate math
-    calculateCashRegister();
-    alert("Totals refreshed with newly added services/expenses! Review and click 'Save & Lock' to update.");
-}
+			document.getElementById('cashIncomeToday').value = autoCashIncome;
+			document.getElementById('gpayIncomeToday').value = autoGpayIncome;
+			document.getElementById('cashExpenseTotal').value = autoExpenseTotal;
 
-let masterServiceRates = [];
+			calculateCashRegister();
+			alert("Totals refreshed with newly added services/expenses! Review and click 'Save & Lock' to update.");
+		};
 
-// 1. Listen to live rate master changes from Firebase
-onSnapshot(collection(db, "service_rates"), (snapshot) => {
-    masterServiceRates = [];
-    snapshot.forEach(docSnap => {
-        masterServiceRates.push({ id: docSnap.id, ...docSnap.data() });
-    });
-    masterServiceRates.sort((a, b) => a.dept.localeCompare(b.dept) || a.name.localeCompare(b.name));
-    initQuickSelectDropdowns();
-});
+		function initQuickSelectDropdowns() {
+			const deptSelect = document.getElementById('quickDeptSelect');
+			if (!deptSelect) return;
 
-function initQuickSelectDropdowns() {
-    const deptSelect = document.getElementById('quickDeptSelect');
-    if (!deptSelect) return;
+			const depts = [...new Set(masterServiceRates.map(r => r.dept))];
+			deptSelect.innerHTML = `<option value="ALL">-- Filter by Department (${masterServiceRates.length}) --</option>`;
+			depts.forEach(d => {
+				deptSelect.innerHTML += `<option value="${d}">${d}</option>`;
+			});
+			filterQuickServiceDropdown();
+		}
 
-    const depts = [...new Set(masterServiceRates.map(r => r.dept))];
-    deptSelect.innerHTML = `<option value="ALL">-- Filter by Department (${masterServiceRates.length}) --</option>`;
-    depts.forEach(d => {
-        deptSelect.innerHTML += `<option value="${d}">${d}</option>`;
-    });
-    filterQuickServiceDropdown();
-}
+		window.filterQuickServiceDropdown = function() {
+			const selectedDept = document.getElementById('quickDeptSelect').value;
+			const serviceSelect = document.getElementById('quickServiceSelect');
 
-window.filterQuickServiceDropdown = function() {
-    const selectedDept = document.getElementById('quickDeptSelect').value;
-    const serviceSelect = document.getElementById('quickServiceSelect');
+			if (selectedDept !== "ALL") {
+				const cleanDept = selectedDept.trim().toUpperCase();
+				const mappedCategory = DEPT_TO_CATEGORY_MAP[cleanDept] || "Others";
+				const catDropdown = document.getElementById('serviceCategory');
+				if (catDropdown) catDropdown.value = mappedCategory;
+			}
 
-    // 1. Immediately update Category as soon as Department is selected
-    if (selectedDept !== "ALL") {
-        const cleanDept = selectedDept.trim().toUpperCase();
-        const mappedCategory = DEPT_TO_CATEGORY_MAP[cleanDept] || "Others";
-        const catDropdown = document.getElementById('serviceCategory');
-        if (catDropdown) catDropdown.value = mappedCategory;
-    }
+			const filtered = selectedDept === "ALL" 
+				? masterServiceRates 
+				: masterServiceRates.filter(r => r.dept.trim().toUpperCase() === selectedDept.trim().toUpperCase());
 
-    // 2. Filter the Services dropdown
-    const filtered = selectedDept === "ALL" 
-        ? masterServiceRates 
-        : masterServiceRates.filter(r => r.dept.trim().toUpperCase() === selectedDept.trim().toUpperCase());
+			serviceSelect.innerHTML = `<option value="">-- Choose from Rate Master --</option>`;
+			filtered.forEach(s => {
+				serviceSelect.innerHTML += `<option value="${s.id}">${s.name} — ₹${s.rate}</option>`;
+			});
 
-    serviceSelect.innerHTML = `<option value="">-- Choose from Rate Master --</option>`;
-    filtered.forEach(s => {
-        serviceSelect.innerHTML += `<option value="${s.id}">${s.name} — ₹${s.rate}</option>`;
-    });
+			document.getElementById('quickRateNote').classList.add('hidden');
+		};
 
-    // Clear previous rate note when department changes
-    document.getElementById('quickRateNote').classList.add('hidden');
-};
+		const DEPT_TO_CATEGORY_MAP = {
+			"AGRICULTURAL DEPT": "Govt & Citizen Portals",
+			"E TREASURY / LIMOMS": "Govt & Citizen Portals",
+			"FOOD SAFETY": "Govt & Citizen Portals",
+			"K SMART": "Govt & Citizen Portals",
+			"LABOUR DEPT": "Govt & Citizen Portals",
+			"MSME": "Govt & Citizen Portals",
+			"NORKA": "Govt & Citizen Portals",
+			"PENSION": "Govt & Citizen Portals",
+			"REVENUE": "Govt & Citizen Portals",
+			"THUNA": "Govt & Citizen Portals",
+			"OTHER DEPARTMENTS": "Govt & Citizen Portals",
+			"COUNTER & PRINTING SERVICES": "Counter & Printing Services",
+			"EDUCATION": "Education & Exams",
+			"SCHOLARSHIP": "Education & Exams",
+			"EMPLOYMENT EXCHANGE": "Recruitment & Job Applications",
+			"JOB APPLICATION": "Recruitment & Job Applications",
+			"NVSP (VOTERS)": "Identity & Registrations",
+			"PARIVAHAN": "Identity & Registrations",
+			"PANCARD": "Identity & Registrations",
+			"PASSPORT SEVA": "Identity & Registrations",
+			"REGISTRATION DEPT": "Identity & Registrations",
+			"SUPPLY OFFICE": "Identity & Registrations",
+			"BILL PAYMENT": "Travel & Utility Services",
+			"BOOKING": "Travel & Utility Services",
+			"KSEB": "Travel & Utility Services",
+			"KERALA WATER AUTHORITY": "Travel & Utility Services",
+			"TICKET": "Travel & Utility Services",
+			"EDUCATION LOAN": "Financial & Insurance",
+			"PS/EPF": "Financial & Insurance",
+			"TAX": "Financial & Insurance"
+		};
 
-// 2. Auto-fill form fields when a rate master item is picked
-// Maps Rate Card Departments -> Your Existing 8 Reporting Categories
-const DEPT_TO_CATEGORY_MAP = {
-    // Govt & Citizen Portals
-    "AGRICULTURAL DEPT": "Govt & Citizen Portals",
-    "E TREASURY / LIMOMS": "Govt & Citizen Portals",
-    "FOOD SAFETY": "Govt & Citizen Portals",
-    "K SMART": "Govt & Citizen Portals",
-    "LABOUR DEPT": "Govt & Citizen Portals",
-    "MSME": "Govt & Citizen Portals",
-    "NORKA": "Govt & Citizen Portals",
-    "PENSION": "Govt & Citizen Portals",
-    "REVENUE": "Govt & Citizen Portals",
-    "THUNA": "Govt & Citizen Portals",
-    "OTHER DEPARTMENTS": "Govt & Citizen Portals",
+		window.applyQuickServiceRate = function() {
+			const selectedId = document.getElementById('quickServiceSelect').value;
+			const noteBox = document.getElementById('quickRateNote');
 
-	"COUNTER & PRINTING SERVICES": "Counter & Printing Services",
-	
-    // Education & Exams
-    "EDUCATION": "Education & Exams",
-    "SCHOLARSHIP": "Education & Exams",
+			if (!selectedId) {
+				noteBox.classList.add('hidden');
+				return;
+			}
 
-    // Recruitment & Job Applications
-    "EMPLOYMENT EXCHANGE": "Recruitment & Job Applications",
-    "JOB APPLICATION": "Recruitment & Job Applications",
+			const item = masterServiceRates.find(r => r.id === selectedId);
+			if (!item) return;
 
-    // Identity & Registrations
-    "NVSP (VOTERS)": "Identity & Registrations",
-    "PARIVAHAN": "Identity & Registrations",
-    "PANCARD": "Identity & Registrations",
-    "PASSPORT SEVA": "Identity & Registrations",
-    "REGISTRATION DEPT": "Identity & Registrations",
-    "SUPPLY OFFICE": "Identity & Registrations",
+			const cleanDept = (item.dept || "").trim().toUpperCase();
+			document.getElementById('serviceCategory').value = DEPT_TO_CATEGORY_MAP[cleanDept] || "Others";
+			document.getElementById('serviceName').value = item.name;
+			document.getElementById('serviceCharge').value = item.rate;
+			
+			if (typeof calculateTotal === 'function') {
+				calculateTotal();
+			}
 
-    // Travel & Utility Services
-    "BILL PAYMENT": "Travel & Utility Services",
-    "BOOKING": "Travel & Utility Services",
-    "KSEB": "Travel & Utility Services",
-    "KERALA WATER AUTHORITY": "Travel & Utility Services",
-    "TICKET": "Travel & Utility Services",
-
-    // Financial & Insurance
-    "EDUCATION LOAN": "Financial & Insurance",
-    "PS/EPF": "Financial & Insurance",
-    "TAX": "Financial & Insurance"
-	
-	
-};
-
-window.applyQuickServiceRate = function() {
-    const selectedId = document.getElementById('quickServiceSelect').value;
-    const noteBox = document.getElementById('quickRateNote');
-
-    if (!selectedId) {
-        noteBox.classList.add('hidden');
-        return;
-    }
-
-    const item = masterServiceRates.find(r => r.id === selectedId);
-    if (!item) return;
-
-    // 1. Ensure Category matches (even if user picked directly from "All Departments")
-    const cleanDept = (item.dept || "").trim().toUpperCase();
-    document.getElementById('serviceCategory').value = DEPT_TO_CATEGORY_MAP[cleanDept] || "Others";
-
-    // 2. Auto-fill Service Name and Rate
-    document.getElementById('serviceName').value = item.name;
-    document.getElementById('serviceCharge').value = item.rate;
-    
-    // 3. Recalculate Total Fee
-    if (typeof calculateTotal === 'function') {
-        calculateTotal();
-    }
-
-    // 4. Show conditional note / rule if available
-    if (item.note && item.note.trim() !== "") {
-        noteBox.innerText = `Rate Note / Rule: ${item.note}`;
-        noteBox.classList.remove('hidden');
-    } else {
-        noteBox.classList.add('hidden');
-    }
-};
+			if (item.note && item.note.trim() !== "") {
+				noteBox.innerText = `Rate Note / Rule: ${item.note}`;
+				noteBox.classList.remove('hidden');
+			} else {
+				noteBox.classList.add('hidden');
+			}
+		};
     </script>
 
     <!-- App UI & Business Logic Script -->
@@ -2548,6 +2624,32 @@ window.applyQuickServiceRate = function() {
                     </style>
                 </head>
                 <body>
+				
+						<div class="bg-slate-900 border border-slate-800 rounded-2xl max-w-sm w-full p-6 shadow-2xl space-y-4">
+							<div class="text-center">
+								<h2 class="text-lg font-bold text-white">CSC Counter Login</h2>
+								<p class="text-xs text-slate-400 mt-1">Sign in once to sync this device</p>
+							</div>
+
+							<form id="shopLoginForm" class="space-y-3">
+								<div>
+									<label class="block text-xs font-medium text-slate-300 mb-1">Shop Email</label>
+									<input type="email" id="loginEmail" required placeholder="shop@cscpayyanur.com"
+										class="w-full bg-slate-950 border border-slate-700 rounded-lg px-3 py-2 text-sm text-white focus:outline-none focus:border-emerald-500">
+								</div>
+								<div>
+									<label class="block text-xs font-medium text-slate-300 mb-1">Password</label>
+									<input type="password" id="loginPassword" required placeholder="••••••••"
+										class="w-full bg-slate-950 border border-slate-700 rounded-lg px-3 py-2 text-sm text-white focus:outline-none focus:border-emerald-500">
+								</div>
+								<p id="loginErrorMsg" class="text-xs text-rose-400 hidden"></p>
+								<button type="submit" id="loginSubmitBtn"
+									class="w-full bg-emerald-600 hover:bg-emerald-700 text-white font-semibold py-2 rounded-lg text-sm transition">
+									Unlock Counter App
+								</button>
+							</form>
+						</div>
+					</div>
                     <table>
                         <thead>
                             <tr>
